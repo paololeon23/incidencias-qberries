@@ -1,4 +1,4 @@
-const CACHE = "qb-compromiso-v12";
+const CACHE = "qb-compromiso-v14";
 
 const ASSETS = [
   "./",
@@ -71,6 +71,7 @@ async function desdeCache(cache, request) {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
+  if (new URL(request.url).origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
     event.respondWith((async () => {

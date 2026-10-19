@@ -760,6 +760,13 @@
 .fase-pill.is-llamada { background: #E7F6EC; color: #1F7A38; }
 .fase-pill.is-escrita { background: #FFF3DE; color: #8A5A10; }
 .fase-pill.is-dt { background: #FDECEC; color: #B42318; }
+.hit-row.is-blocked {
+  background: #3F1212;
+  border-color: #6E1D1D;
+}
+.hit-row.is-blocked strong { color: #FFF5F5; }
+.hit-row.is-blocked small { color: #F3C0C0; }
+.fase-pill.is-lock { background: #F4B4B4; color: #6E1212; }
 .finder {
   margin: 0;
   padding: 20px 18px 18px;

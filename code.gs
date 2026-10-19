@@ -112,13 +112,15 @@ function leerRecientes_(sh, dias) {
 function leerDni_(sh, dni) {
   var last = sh.getLastRow();
   if (last < 2) return [];
-  var dnis = sh.getRange(2, colIndex_("DNI"), last - 1, 1).getValues();
   var header = sh.getRange(1, 1, 1, HEADERS.length).getValues()[0];
+  var values = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var col = header.indexOf("DNI");
+  if (col < 0) return [];
+  var wanted = String(dni);
   var list = [];
-  for (var i = 0; i < dnis.length; i++) {
-    if (String(dnis[i][0]) !== dni) continue;
-    var row = sh.getRange(i + 2, 1, 1, HEADERS.length).getValues()[0];
-    var acta = actaDeFila_(header, row);
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][col]) !== wanted) continue;
+    var acta = actaDeFila_(header, values[i]);
     if (acta) list.push(acta);
   }
   return list;

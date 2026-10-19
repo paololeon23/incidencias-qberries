@@ -58,7 +58,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "8";
+  const APP_VERSION = "9.1";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -322,8 +322,9 @@
   }
 
   function actasDe(dni) {
+    const buscado = String(dni || "");
     return state.actas.filter((acta) => {
-      return acta.trabajador && acta.trabajador.dni === dni && acta.tipo !== "conforme";
+      return acta.trabajador && String(acta.trabajador.dni) === buscado && acta.tipo !== "conforme";
     });
   }
 
@@ -341,6 +342,50 @@
     if (!cols.llamada) return "llamada";
     if (!cols.escrita) return "escrita";
     return "dt";
+  }
+
+  function dtEncendido(value) {
+    return value === true || value === "SÍ" || value === "SI" || value === "TRUE" || value === "true" || value === 1;
+  }
+
+  function dtBloqueado(dni) {
+    const ultima = actasDe(dni)
+      .filter((acta) => acta.tipo === "dt")
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    if (!ultima) return false;
+    return dtEncendido(ultima.columnas && ultima.columnas.dt);
+  }
+
+  function soltarDt(dni) {
+    const buscado = String(dni || "");
+    state.actas.forEach((acta) => {
+      if (!acta.trabajador || String(acta.trabajador.dni) !== buscado || acta.tipo !== "dt") return;
+      acta.columnas = Object.assign({}, acta.columnas || {}, { dt: false });
+      acta.progreso = Object.assign({}, acta.progreso || {}, { dt: false });
+    });
+  }
+
+  function aplicarDtServidor(lista) {
+    const porDni = new Map();
+    (lista || []).forEach((acta) => {
+      if (!acta || acta.tipo !== "dt" || !acta.trabajador || !acta.trabajador.dni) return;
+      const dni = String(acta.trabajador.dni);
+      const on = !acta.columnas || dtEncendido(acta.columnas.dt);
+      porDni.set(dni, porDni.get(dni) === true || on);
+    });
+    porDni.forEach((on, dni) => {
+      if (on) cerrarDt(dni);
+      else soltarDt(dni);
+    });
+  }
+
+  function cerrarDt(dni) {
+    const ultima = actasDe(dni)
+      .filter((acta) => acta.tipo === "dt")
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    if (!ultima) return;
+    ultima.columnas = Object.assign({}, ultima.columnas || {}, { dt: true });
+    ultima.progreso = Object.assign({}, ultima.progreso || {}, { dt: true });
   }
 
   function progresoPropio(previo, medida) {
@@ -655,13 +700,29 @@
     if (state.pulling) return;
     state.pulling = true;
     try {
-      const response = await fetch(conConsulta_(syncUrl(), { dias: "1" }), { cache: "no-store", signal: netSignal(20000) });
-      if (!response.ok) throw new Error("api");
-      const remote = await response.json();
-      const lista = Array.isArray(remote) ? remote : [];
-      mezclarActas(lista.map((acta) => Object.assign({}, acta, { pending: false, synced: true })));
+      const signal = netSignal(10000);
+      const marcas = Date.now();
+      const dnis = [...new Set(state.actas.filter((acta) => acta.tipo === "dt" && acta.trabajador).map((acta) => String(acta.trabajador.dni)))].slice(0, 8);
+      const pedidos = [fetch(conConsulta_(syncUrl(), { dias: "1", t: marcas }), { cache: "no-store", redirect: "follow", signal })];
+      dnis.forEach((dni) => pedidos.push(fetch(conConsulta_(syncUrl(), { dni, t: marcas }), { cache: "no-store", redirect: "follow", signal })));
+      const responses = await Promise.all(pedidos.map((pedido) => pedido.catch(() => null)));
+      let ok = false;
+      for (const response of responses) {
+        if (!response || !response.ok) continue;
+        const remote = await response.json().catch(() => null);
+        if (!Array.isArray(remote)) continue;
+        ok = true;
+        mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
+      }
+      if (!ok) throw new Error("api");
       state.campoOnline = true;
-      await idbReplace(state.actas);
+      idbReplace(state.actas);
+      const abierto = state.draft.trabajador && state.draft.trabajador.dni;
+      if (state.screen === "flow" && abierto && dtBloqueado(abierto)) {
+        clearDraft(true);
+        go("home");
+        avisoDt();
+      }
       await flushPending();
     } catch (error) {
       state.campoOnline = false;
@@ -686,10 +747,17 @@
       if (!acta || !acta.id) return;
       completarActa(acta);
       const local = map.get(acta.id);
+      if (local && acta.columnas && Object.prototype.hasOwnProperty.call(acta.columnas, "dt")) {
+        const dt = acta.columnas.dt === true || acta.columnas.dt === "SÍ" || acta.columnas.dt === "SI";
+        local.columnas = Object.assign({}, local.columnas || {}, { dt });
+        local.progreso = Object.assign({}, local.progreso || {}, { dt });
+        acta.columnas.dt = dt;
+      }
       if (local && (local.confirmado === false || local.pending || local.synced !== true)) return;
       map.set(acta.id, acta);
     });
     state.actas = [...map.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    aplicarDtServidor(lista);
   }
 
   function yaLoTengo(dni) {
@@ -700,21 +768,36 @@
     });
   }
 
+  function tuvoDt(dni) {
+    return actasDe(dni).some((acta) => acta.tipo === "dt");
+  }
+
+  function servidorBloquea(lista, dni) {
+    const filas = (lista || []).filter((acta) => {
+      return acta && acta.tipo === "dt" && acta.trabajador && String(acta.trabajador.dni) === String(dni);
+    });
+    if (!filas.length) return null;
+    return filas.some((acta) => !acta.columnas || dtEncendido(acta.columnas.dt));
+  }
+
   async function asegurarHistoria(dni) {
-    if (yaLoTengo(dni)) return;
+    if (yaLoTengo(dni) && !tuvoDt(dni)) return;
     await historiaDe(dni);
   }
 
   async function historiaDe(dni) {
-    if (!dni || !navigator.onLine) return;
+    if (!dni || !navigator.onLine) return null;
     try {
-      const response = await fetch(conConsulta_(syncUrl(), { dni }), { cache: "no-store", signal: netSignal(20000) });
-      if (!response.ok) return;
+      const response = await fetch(conConsulta_(syncUrl(), { dni }), { cache: "no-store", redirect: "follow", signal: netSignal(10000) });
+      if (!response.ok) return null;
       const remote = await response.json();
-      if (!Array.isArray(remote)) return;
-      mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true })));
-      await idbReplace(state.actas);
-    } catch (error) { /* sin señal se usa lo que ya está en el teléfono */ }
+      if (!Array.isArray(remote)) return null;
+      mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
+      idbReplace(state.actas);
+      return remote;
+    } catch (error) {
+      return null;
+    }
   }
 
   function people(byDni) {
@@ -845,7 +928,10 @@
       }
     }
     if (path === "/checklist") {
-      state.screen = "flow";
+      if (state.draft.trabajador && state.draft.trabajador.dni) {
+        state.step = 2;
+        state.screen = "flow";
+      } else state.screen = "home";
       return;
     }
     if (path === "/historial") {
@@ -907,6 +993,10 @@
   }
 
   function render() {
+    if (state.screen === "flow" && !(state.draft.trabajador && state.draft.trabajador.dni)) {
+      state.screen = "home";
+      if ((location.hash || "") !== "#/") history.replaceState({ path: "/" }, "", "#/");
+    }
     document.body.dataset.qbScreen = state.screen === "flow" || state.screen === "acta" ? "form" : "home";
     if (state.screen === "home") app.innerHTML = viewHome();
     else if (state.screen === "flow") app.innerHTML = viewFlow();
@@ -1062,13 +1152,12 @@
   }
 
   function viewFlow() {
-    const step = state.step;
     return `
       <section class="screen active" id="screen-flow">
         ${header({
           compact: true,
           back: "back",
-          title: STEPS[step - 1].title,
+          title: "Checklist",
           sub: "Licapa I - II - III · cosecha",
           net: false,
           tools: [
@@ -1078,40 +1167,8 @@
         })}
         <div class="panel-scroll">
           <div class="form-body">
-            ${step === 1 ? stepPersona() : stepChecklist()}
+            ${stepChecklist()}
           </div>
-        </div>
-      </section>`;
-  }
-
-  function stepPersona() {
-    const dniMode = state.searchMode === "dni";
-    return `
-      <section class="section-card">
-        <div class="section-head">
-          <h2 class="section-title">Cosechador</h2>
-          <p class="section-sub">DNI o QR. La fase ya está guardada.</p>
-        </div>
-        <div class="seg">
-          <button type="button" data-act="mode-dni" class="${dniMode ? "is-on" : ""}">DNI</button>
-          <button type="button" data-act="mode-nombre" class="${dniMode ? "" : "is-on"}">Nombre</button>
-        </div>
-        <div class="finder-row">
-          ${dniMode
-            ? `<input id="worker-q" class="dni-input" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="00000000" value="${esc(state.query)}" aria-label="DNI">`
-            : `<input id="worker-q" class="name-input" type="search" autocomplete="off" placeholder="Apellido o nombre" value="${esc(state.query)}" aria-label="Nombre">`}
-          <button type="button" class="qr-scan-btn" data-act="scan-qr" aria-label="Escanear QR">${icon("scan", 20)}</button>
-        </div>
-        <div id="worker-out"></div>
-        <div class="manual-box" id="manual-box" hidden>
-          <p>Ese DNI no está en el padrón. Puedes dejar el acta igual, marcada como fuera de padrón.</p>
-          <label class="field"><span>Nombre completo</span>
-            <input id="manual-nombre" type="text" maxlength="80" value="${esc(state.manualNombre)}" autocomplete="name">
-          </label>
-          <label class="field"><span>Cargo</span>
-            <input id="manual-cargo" type="text" maxlength="40" value="${esc(state.manualCargo)}">
-          </label>
-          <button type="button" class="btn btn-primary" data-act="save-manual" style="width:100%">Usar este trabajador</button>
         </div>
       </section>`;
   }
@@ -1141,13 +1198,15 @@
   }
 
   function fasePill(dni) {
+    if (dtBloqueado(dni)) return `<span class="fase-pill is-lock">Bloqueado</span>`;
     const fase = faseDe(dni);
     return `<span class="fase-pill is-${fase}">${esc(faseCorta(fase))}</span>`;
   }
 
   function filaTrabajador(worker) {
+    const bloqueado = dtBloqueado(worker.dni);
     return `
-      <button type="button" class="hit-row" data-act="abrir" data-dni="${esc(worker.dni)}">
+      <button type="button" class="hit-row${bloqueado ? " is-blocked" : ""}" data-act="abrir" data-dni="${esc(worker.dni)}">
         <span>
           <strong>${esc(titleCase(worker.nombre))}</strong>
           <small>DNI ${esc(worker.dni)}</small>
@@ -1184,7 +1243,25 @@
       : `<p class="search-empty">Nadie coincide.</p>`;
   }
 
+  function avisoDt() {
+    toast("Sigue en suspensión. Solo Recursos Humanos lo libera, quitando el check de DT.", "warn");
+  }
+
   async function abrirTrabajador(worker) {
+    if (tuvoDt(worker.dni) || dtBloqueado(worker.dni)) {
+      const remote = await historiaDe(worker.dni);
+      const mando = servidorBloquea(remote, worker.dni);
+      if (mando === true) {
+        cerrarDt(worker.dni);
+        avisoDt();
+        return;
+      }
+      if (mando === false) soltarDt(worker.dni);
+      else if (dtBloqueado(worker.dni)) {
+        avisoDt();
+        return;
+      }
+    }
     const evaluador = state.draft.evaluador;
     const supervisor = state.draft.supervisor;
     state.draft = emptyDraft();
@@ -1199,8 +1276,7 @@
     go("flow");
     const antes = faseDe(worker.dni);
     asegurarHistoria(worker.dni).then(() => {
-      if (state.screen !== "flow" || !state.draft.trabajador || state.draft.trabajador.dni !== worker.dni) return;
-      if (faseDe(worker.dni) !== antes) render();
+      if (state.screen === "flow" && state.draft.trabajador && state.draft.trabajador.dni === worker.dni && faseDe(worker.dni) !== antes) render();
     });
   }
 
@@ -1271,14 +1347,14 @@
         </div>
         <div class="fase-cols" aria-label="Fases de esta persona">
           ${[["llamada", "Llamada"], ["escrita", "Carta"], ["dt", "DT"]].map(([id, label]) => {
-            const on = hecha(id);
+            const on = id === "dt" ? dtBloqueado(person.dni) : hecha(id);
             return `<div class="fase-col ${on ? "is-on" : ""}">${on ? `<img class="fase-check" src="${IMG.check}" alt="">` : "—"} ${esc(label)}</div>`;
           }).join("")}
         </div>
         <div class="fase-list">
           ${MEDIDAS.map((item) => {
             const abierta = item.id === fase;
-            const lista = hecha(item.id);
+            const lista = item.id === "dt" ? dtBloqueado(person.dni) : hecha(item.id);
             const bloqueada = !abierta && !lista;
             return `
               <div class="fase ${abierta ? "is-open" : ""} ${lista ? "is-done" : ""} ${bloqueada ? "is-locked" : ""}">
@@ -1911,6 +1987,10 @@
 
   async function saveActa() {
     if (state.saving) return;
+    if (state.draft.trabajador && dtBloqueado(state.draft.trabajador.dni)) {
+      avisoDt();
+      return;
+    }
     if (!state.draft.supervisor) {
       toast("Elige al responsable", "warn");
       openPicker("supervisor");
@@ -2380,6 +2460,20 @@
       return;
     }
     if (!state.draft.trabajador) {
+      if (tuvoDt(dni) || dtBloqueado(dni)) {
+        const remote = await historiaDe(dni);
+        const mando = servidorBloquea(remote, dni);
+        if (mando === true) {
+          cerrarDt(dni);
+          avisoDt();
+          return;
+        }
+        if (mando === false) soltarDt(dni);
+        else if (dtBloqueado(dni)) {
+          avisoDt();
+          return;
+        }
+      }
       const evaluador = state.draft.evaluador;
       const supervisor = state.draft.supervisor;
       state.draft = emptyDraft();
@@ -2402,8 +2496,7 @@
     toast(misma ? "Carnet verificado" : `${titleCase(worker.nombre)} · ${medidaById(faseDe(dni)).label}`);
     const antes = faseDe(dni);
     asegurarHistoria(dni).then(() => {
-      if (state.screen !== "flow" || !state.draft.trabajador || state.draft.trabajador.dni !== dni) return;
-      if (faseDe(dni) !== antes) render();
+      if (state.screen === "flow" && state.draft.trabajador && state.draft.trabajador.dni === dni && faseDe(dni) !== antes) render();
     });
   }
 
@@ -2733,10 +2826,76 @@
     } else toast("Transferencia automática apagada", "warn");
   }
 
+  async function refrescarCampo() {
+    const vistos = new Set();
+    const bloqueados = new Set();
+    state.actas.forEach((acta) => {
+      if (acta.tipo !== "dt" || !acta.trabajador) return;
+      const dni = String(acta.trabajador.dni);
+      vistos.add(dni);
+      if (dtBloqueado(dni)) bloqueados.add(dni);
+    });
+    const signal = netSignal(10000);
+    const marcas = Date.now();
+    const inicio = performance.now();
+    const pedidos = [fetch(conConsulta_(syncUrl(), { dias: "1", t: marcas }), { cache: "no-store", redirect: "follow", signal })];
+    vistos.forEach((dni) => {
+      pedidos.push(fetch(conConsulta_(syncUrl(), { dni, t: marcas }), { cache: "no-store", redirect: "follow", signal }));
+    });
+    const responses = await Promise.all(pedidos.map((pedido) => pedido.catch(() => null)));
+    let ok = false;
+    for (const response of responses) {
+      if (!response || !response.ok) continue;
+      const remote = await response.json().catch(() => null);
+      if (!Array.isArray(remote)) continue;
+      ok = true;
+      mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
+    }
+    const segundos = Math.round((performance.now() - inicio) / 100) / 10;
+    if (ok) idbReplace(state.actas);
+    if (state.screen === "home") paintHomeSearch();
+    paintNet();
+    return {
+      ok,
+      segundos,
+      libres: [...bloqueados].filter((dni) => !dtBloqueado(dni)),
+      cerrados: [...vistos].filter((dni) => !bloqueados.has(dni) && dtBloqueado(dni))
+    };
+  }
+
   async function applyUpdate() {
+    const label = document.getElementById("update-state");
+    if (label) label.textContent = "Revisando la versión y el Excel…";
+    await checkUpdate();
+    if (!state.updateAvailable) {
+      if (label) label.textContent = "Pidiendo el Excel…";
+      try {
+        const resultado = await refrescarCampo();
+        if (!resultado.ok) {
+          if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
+          toast("El GET no respondió. Presiona otra vez.", "warn");
+          return;
+        }
+        if (resultado.libres.length) {
+          if (label) label.textContent = `Listo en ${resultado.segundos} s. Suspensión liberada.`;
+          toast(`El Excel liberó la suspensión. GET ${resultado.segundos} s.`);
+          return;
+        }
+        if (resultado.cerrados.length) {
+          if (label) label.textContent = `Listo en ${resultado.segundos} s. Volvió a suspensión.`;
+          toast(`Otra vez en suspensión. GET ${resultado.segundos} s.`);
+          return;
+        }
+        if (label) label.textContent = `Está al día. GET ${resultado.segundos} s.`;
+        toast(`Excel revisado en ${resultado.segundos} s. Sin cambios.`);
+      } catch (error) {
+        if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
+        toast("El GET no respondió. Presiona otra vez.", "warn");
+      }
+      return;
+    }
     setLoader(true, "Bajando la app");
     try {
-      await checkUpdate();
       if ("serviceWorker" in navigator) {
         const reg = await navigator.serviceWorker.getRegistration();
         if (reg) await reg.update();
@@ -2761,9 +2920,7 @@
 
   function startNew() {
     clearDraft(true);
-    go("flow");
-    const input = document.getElementById("worker-q");
-    if (input) input.focus();
+    go("home");
   }
 
   async function goBack() {
