@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "Q Berries · Compromiso laboral",
+  "short_name": "Compromiso",
+  "description": "Evalúa al cosechador con el padrón y deja el compromiso de trabajo firmado en el teléfono.",
+  "lang": "es",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#1F3D2A",
+  "icons": [
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

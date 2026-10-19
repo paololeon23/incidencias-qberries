@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1F3D2A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Compromiso">
+  <meta name="description" content="Evalúa al cosechador con el padrón y deja el compromiso de trabajo firmado.">
+  <title>Compromiso laboral · Q Berries</title>
+  <link rel="icon" href="./assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./css/fonts.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <link rel="stylesheet" href="./css/compromiso.css">
+</head>
+<body data-qb-screen="home">
+  <div class="qb-loader" id="loader" hidden>
+    <div class="qb-loader-card">
+      <div class="qb-spinner"></div>
+      <p id="loader-text">Cargando padrón</p>
+    </div>
+  </div>
+
+  <div class="app" id="app"></div>
+
+  <div class="form-actions" id="actions"></div>
+
+  <div class="overlay" id="picker" aria-hidden="true">
+    <div class="precise-modal" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+      <div class="precise-modal-head">
+        <h3 id="picker-title">Elegir</h3>
+        <button type="button" class="icon-btn" data-act="close-picker" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <label class="precise-search">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="picker-q" type="search" placeholder="Buscar" autocomplete="off" enterkeyhint="search">
+      </label>
+      <div class="precise-list" id="picker-list"></div>
+    </div>
+  </div>
+
+  <div class="overlay qb-sync-modal" id="help" hidden>
+    <div class="qb-sync-sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="qb-sync-head">
+        <div>
+          <div class="qb-sync-kicker">Teléfono</div>
+          <h2 id="help-title">Ajustes</h2>
+        </div>
+        <button type="button" class="qb-sync-close" data-act="close-help" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="qb-sync-version">
+        <span>Versión en este teléfono</span>
+        <strong id="app-version">—</strong>
+      </div>
+      <div class="qb-sync-actions">
+        <button type="button" class="qb-sync-btn" data-act="clear-cache">
+          Borrar caché
+          <small>Quita la copia vieja de la app. Las actas del teléfono se quedan.</small>
+        </button>
+        <button type="button" class="qb-sync-btn" data-act="toggle-transfer" id="transfer-btn">
+          Modo transferencia automática
+          <small id="transfer-state">Sube los pendientes sola, también en 3G.</small>
+        </button>
+        <button type="button" class="qb-sync-btn primary" data-act="apply-update">
+          Bajar actualización
+          <small id="update-state">Revisa si hay una versión nueva y la baja completa.</small>
+        </button>
+      </div>
+      <p class="qb-sync-tip">Sin internet la app sigue, el padrón queda guardado y el PDF se arma en el teléfono.</p>
+      <button type="button" class="qb-sync-done" data-act="close-help">Listo</button>
+    </div>
+  </div>
+
+  <div class="qb-fb" id="fb" hidden>
+    <div class="qb-fb-sheet" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+      <div class="qb-fb-icon info" id="fb-icon"></div>
+      <div class="qb-fb-copy">
+        <strong id="fb-title"></strong>
+        <p id="fb-text"></p>
+      </div>
+      <div class="qb-fb-actions">
+        <button type="button" class="qb-fb-secondary" id="fb-cancel">Cancelar</button>
+        <button type="button" class="qb-fb-primary" id="fb-ok">Continuar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="qb-transfer" id="transfer" aria-hidden="true">
+    <div class="qb-transfer-sheet" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
+      <div class="qb-transfer-spinner"></div>
+      <h2 id="transfer-title">Transferencia</h2>
+      <p class="qb-transfer-sub" id="transfer-sub">Subiendo actas.</p>
+      <div class="qb-transfer-progress">
+        <div class="qb-transfer-bar"><span id="transfer-bar"></span></div>
+        <p class="qb-transfer-count" id="transfer-count">0 / 0</p>
+      </div>
+      <p class="qb-transfer-hint" id="transfer-hint"></p>
+      <div class="qb-transfer-actions" id="transfer-actions" hidden>
+        <button type="button" class="qb-fb-primary" data-act="close-transfer">Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="qb-toast-stack" id="toasts"></div>
+  <script src="./js/imagenes.js"></script>
+  <script src="./js/jsQR.js"></script>
+  <script src="./js/app.js" defer></script>
+</body>
+</html>

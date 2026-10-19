@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1F3D2A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Compromiso">
+  <title>Instalar · Q Berries</title>
+  <link rel="icon" href="./assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./css/fonts.css">
+  <style>
+    body { margin: 0; font-family: "Plus Jakarta Sans", sans-serif; background: #F4F7F4; color: #1F3D2A; }
+    main { max-width: 420px; margin: 0 auto; padding: 28px 18px 40px; }
+    img.logo { width: 72px; height: 72px; object-fit: contain; background: #fff; border-radius: 16px; border: 1px solid #E2E8E2; }
+    h1 { font-size: 1.45rem; margin: 14px 0 6px; }
+    p { line-height: 1.45; color: #3D5A4A; }
+    .card { background: #fff; border-radius: 18px; padding: 16px; border: 1px solid #E2E8E2; margin-top: 16px; }
+    button { width: 100%; min-height: 48px; border: 0; border-radius: 14px; background: #1F3D2A; color: #fff; font-weight: 800; font-size: 1rem; }
+    ol { margin: 8px 0 0; padding-left: 18px; }
+    li { margin: 8px 0; }
+    .qr { width: 220px; height: 220px; display: block; margin: 8px auto 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="./assets/icon-192.png" alt="Q Berries">
+    <h1>Instalar Compromiso</h1>
+    <p id="lead">La app queda en el teléfono, con el padrón adentro.</p>
+    <div class="card" id="android">
+      <button type="button" id="instalar">Instalar en Android</button>
+      <p id="android-ayuda">Si el botón no abre la instalación, en Chrome toca el menú de tres puntos y elige <strong>Instalar aplicación</strong>.</p>
+    </div>
+    <div class="card" id="iphone" hidden>
+      <strong>En iPhone no se descarga un archivo.</strong>
+      <ol>
+        <li>Abre esta página en Safari.</li>
+        <li>Toca el botón Compartir.</li>
+        <li>Elige <strong>Agregar a inicio</strong>.</li>
+        <li>Confirma. El ícono de Q Berries queda en la pantalla.</li>
+      </ol>
+    </div>
+    <div class="card" id="escritorio">
+      <p>En el celular, escanea este código. En Android instala directo. En iPhone sigue los pasos de Safari.</p>
+      <img class="qr" src="./assets/instalar-android.png" alt="Código para instalar">
+    </div>
+  </main>
+  <script>
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const android = /Android/i.test(navigator.userAgent);
+    const desktop = document.getElementById("escritorio");
+    if (ios) {
+      document.getElementById("android").hidden = true;
+      document.getElementById("iphone").hidden = false;
+      desktop.hidden = true;
+    } else if (android) {
+      desktop.hidden = true;
+    }
+    let espera = null;
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      espera = event;
+    });
+    document.getElementById("instalar").addEventListener("click", async () => {
+      if (!espera) return;
+      espera.prompt();
+      await espera.userChoice;
+      espera = null;
+    });
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  </script>
+</body>
+</html>
