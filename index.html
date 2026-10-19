@@ -15,8 +15,24 @@
   <link rel="stylesheet" href="./css/fonts.css">
   <link rel="stylesheet" href="./css/styles.css">
   <link rel="stylesheet" href="./css/compromiso.css">
+  <script>
+    (function () {
+      var celular = /iPhone|iPod|Android.+Mobile|Windows Phone/i.test(navigator.userAgent || "");
+      if (!celular) document.documentElement.classList.add("is-desktop");
+    })();
+  </script>
 </head>
 <body data-qb-screen="home">
+  <div class="desktop-gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+    <div class="desktop-gate-inner">
+      <img class="desktop-gate-logo" src="./assets/icon-192.png" alt="Q Berries">
+      <div class="desktop-gate-brand">Q BERRIES</div>
+      <h1 id="gate-title">Solo en el celular</h1>
+      <p class="desktop-gate-lead">Esta app no se abre en pantalla grande. Escanéala con el teléfono para instalarla.</p>
+      <img class="desktop-gate-qr" src="./assets/instalar-android.png" alt="Código para abrir Compromiso en el celular">
+      <p class="desktop-gate-hint">https://incidencias-qberries.netlify.app/#/</p>
+    </div>
+  </div>
   <div class="qb-loader" id="loader" hidden>
     <div class="qb-loader-card">
       <div class="qb-spinner"></div>

@@ -116,17 +116,26 @@ html.is-desktop .desktop-gate,
 body.is-desktop .desktop-gate {
   display: flex;
 }
-html.is-desktop .app,
-html.is-desktop .qb-loader,
-html.is-desktop .qb-fb,
-html.is-desktop .qb-sync-modal,
-html.is-desktop .qb-toast-stack,
-body.is-desktop .app,
-body.is-desktop .qb-loader,
-body.is-desktop .qb-fb,
-body.is-desktop .qb-sync-modal,
-body.is-desktop .qb-toast-stack {
+html.is-desktop .fab-wrap,
+html.is-desktop .form-actions,
+html.is-desktop #picker,
+html.is-desktop #help,
+html.is-desktop #transfer,
+body.is-desktop .fab-wrap,
+body.is-desktop .form-actions,
+body.is-desktop #picker,
+body.is-desktop #help,
+body.is-desktop #transfer {
   display: none !important;
+}
+.desktop-gate-qr {
+  width: 220px;
+  height: 220px;
+  display: block;
+  margin: 0 auto 16px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 10px;
 }
 .desktop-gate-bg {
   position: absolute;
