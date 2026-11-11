@@ -192,5 +192,53 @@
   <script src="./js/imagenes.js"></script>
   <script src="./js/jsQR.js"></script>
   <script src="./js/app.js" defer></script>
+  <script>
+    (function () {
+      if (!("serviceWorker" in navigator)) return;
+      function askReload(reg) {
+        if (!reg || !reg.waiting) return;
+        if (window.__qbUpdateAsked) return;
+        window.__qbUpdateAsked = true;
+        var go = window.confirm("Hay una versión nueva de Compromiso. ¿Actualizar ahora?");
+        if (go) {
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        } else {
+          window.__qbUpdateAsked = false;
+        }
+      }
+      function watchReg(reg) {
+        if (!reg) return;
+        if (reg.waiting) askReload(reg);
+        reg.addEventListener("updatefound", function () {
+          var sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener("statechange", function () {
+            if (sw.state === "installed" && navigator.serviceWorker.controller) askReload(reg);
+          });
+        });
+      }
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (window.__qbReloading) return;
+        window.__qbReloading = true;
+        location.reload();
+      });
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./sw.js").then(function (reg) {
+          watchReg(reg);
+          setInterval(function () {
+            try { reg.update(); } catch (_) {}
+          }, 60 * 1000);
+          document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) {
+              try { reg.update(); } catch (_) {}
+            }
+          });
+          window.addEventListener("online", function () {
+            try { reg.update(); } catch (_) {}
+          });
+        }).catch(function () {});
+      });
+    })();
+  </script>
 </body>
 </html>

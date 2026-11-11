@@ -58,7 +58,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "9.4";
+  const APP_VERSION = "9.5";
   const PAUSA_TEXTO = "Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión.";
   function appCerrada() {
     return document.body.classList.contains("is-paused") || !!localStorage.getItem("qb-pause");
@@ -2884,49 +2884,23 @@
 
   async function applyUpdate() {
     const label = document.getElementById("update-state");
-    if (label) label.textContent = "Revisando la versión y el Excel…";
-    await checkUpdate();
-    if (!state.updateAvailable) {
-      if (label) label.textContent = "Pidiendo el Excel…";
-      try {
-        const resultado = await refrescarCampo();
-        if (!resultado.ok) {
-          if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
-          toast("El GET no respondió. Presiona otra vez.", "warn");
-          return;
-        }
-        if (resultado.libres.length) {
-          if (label) label.textContent = `Listo en ${resultado.segundos} s. Suspensión liberada.`;
-          toast(`El Excel liberó la suspensión. GET ${resultado.segundos} s.`);
-          return;
-        }
-        if (resultado.cerrados.length) {
-          if (label) label.textContent = `Listo en ${resultado.segundos} s. Volvió a suspensión.`;
-          toast(`Otra vez en suspensión. GET ${resultado.segundos} s.`);
-          return;
-        }
-        if (label) label.textContent = `Está al día. GET ${resultado.segundos} s.`;
-        toast(`Excel revisado en ${resultado.segundos} s. Sin cambios.`);
-      } catch (error) {
-        if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
-        toast("El GET no respondió. Presiona otra vez.", "warn");
-      }
-      return;
-    }
-    setLoader(true, "Bajando la app");
+    if (label) label.textContent = "Buscando versión nueva…";
     try {
-      if ("serviceWorker" in navigator) {
+      if (navigator.serviceWorker) {
         const reg = await navigator.serviceWorker.getRegistration();
-        if (reg) await reg.update();
-        if (reg && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        if (reg) {
+          await reg.update();
+          if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        }
       }
       if ("caches" in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((key) => caches.delete(key)));
       }
-      location.reload();
+      toast("Actualizando…");
+      setTimeout(() => location.reload(), 500);
     } catch (error) {
-      setLoader(false);
+      if (label) label.textContent = "No se pudo actualizar. Revisa la señal.";
       toast("No se pudo bajar. Revisa la señal.", "warn");
     }
   }
@@ -3258,10 +3232,5 @@
     }
   });
   bindViewport();
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
-    });
-  }
   boot();
 })();

@@ -1,4 +1,4 @@
-const CACHE = "qb-compromiso-v17";
+const CACHE = "qb-compromiso-v18";
 
 const ASSETS = [
   "./",
@@ -36,7 +36,6 @@ self.addEventListener("install", (event) => {
     await Promise.all(ASSETS.map(async (url) => {
       try { await cache.add(url); } catch (error) { /* un archivo faltante no deja la app sin copia */ }
     }));
-    await self.skipWaiting();
   })());
 });
 
