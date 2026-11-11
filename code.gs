@@ -28,27 +28,12 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  var body = {};
-  try {
-    body = JSON.parse(e.postData.contents);
-  } catch (error) {
-    body = {};
-  }
-  withLock_(function () {
-    var sh = sheet_();
-    if (body.action === "delete" && body.id) {
-      borrarFila_(sh, body.id);
-      return;
-    }
-    var acta = body.acta || body;
-    if (acta && acta.id) {
-      delete acta.pending;
-      delete acta.synced;
-      delete acta.confirmado;
-      guardarFila_(sh, acta);
-    }
+  // App fuera de uso: nadie sube ni borra, aunque el teléfono no se haya actualizado.
+  return json_({
+    ok: false,
+    paused: true,
+    message: "Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión."
   });
-  return json_({ ok: true });
 }
 
 /** Ejecutar una vez desde el editor: actualiza Hoja 1 sin crear otra. */

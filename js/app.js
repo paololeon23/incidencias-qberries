@@ -58,10 +58,10 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "9.3";
+  const APP_VERSION = "9.4";
   const PAUSA_TEXTO = "Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión.";
   function appCerrada() {
-    try { return !!JSON.parse(localStorage.getItem("qb-pause") || "null"); } catch (error) { return false; }
+    return document.body.classList.contains("is-paused") || !!localStorage.getItem("qb-pause");
   }
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
@@ -628,8 +628,20 @@
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const response = await postActa(acta, netSignal(ms));
-        if (response.ok) return true;
-        return false;
+        if (!response.ok) return false;
+        const text = await response.text();
+        try {
+          const data = JSON.parse(text);
+          if (data && (data.ok === false || data.paused)) {
+            const aviso = data.message || PAUSA_TEXTO;
+            if (window.QB_CLOUD_PAUSE && window.QB_CLOUD_PAUSE.show) {
+              window.QB_CLOUD_PAUSE.show({ title: "App fuera de uso", text: aviso });
+            }
+            toast(aviso, "warn");
+            return false;
+          }
+        } catch (error) { /* si no es JSON, con HTTP ok se acepta */ }
+        return true;
       } catch (error) {
         if (attempt === attempts - 1) return false;
       }
@@ -3169,6 +3181,16 @@
   }
 
   async function boot() {
+    if (window.QB_CLOUD_PAUSE && window.QB_CLOUD_PAUSE.refresh) {
+      await window.QB_CLOUD_PAUSE.refresh();
+    }
+    if (appCerrada()) {
+      const saved = (() => {
+        try { return JSON.parse(localStorage.getItem("qb-pause") || "null"); } catch (error) { return null; }
+      })();
+      mostrarPausa(saved || { title: "App fuera de uso", text: PAUSA_TEXTO });
+      return;
+    }
     const pausa = await leerPausaNube();
     if (pausa && pausa.paused) {
       mostrarPausa(pausa);

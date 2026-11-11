@@ -48,6 +48,62 @@
       <p class="pause-gate-lead" id="pause-text">Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión.</p>
     </div>
   </div>
+  <script>
+    (function () {
+      var DEF_TITLE = "App fuera de uso";
+      var DEF_TEXT = "Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión.";
+      function pintar(data) {
+        var box = document.getElementById("pause-gate");
+        var title = document.getElementById("pause-title");
+        var text = document.getElementById("pause-text");
+        if (!box) return;
+        if (title) title.textContent = (data && data.title) || DEF_TITLE;
+        if (text) text.textContent = (data && data.text) || DEF_TEXT;
+        box.hidden = false;
+        box.classList.add("is-on");
+        document.body.classList.add("is-paused");
+        try {
+          localStorage.setItem("qb-pause", JSON.stringify({
+            title: (data && data.title) || DEF_TITLE,
+            text: (data && data.text) || DEF_TEXT
+          }));
+        } catch (e) {}
+      }
+      function quitar() {
+        var box = document.getElementById("pause-gate");
+        if (box) {
+          box.classList.remove("is-on");
+          box.hidden = true;
+        }
+        document.body.classList.remove("is-paused");
+        try { localStorage.removeItem("qb-pause"); } catch (e) {}
+      }
+      function desdeLocal() {
+        try {
+          var raw = localStorage.getItem("qb-pause");
+          if (!raw) return;
+          pintar(JSON.parse(raw));
+        } catch (e) {}
+      }
+      function desdeNube() {
+        return fetch("./status.json?t=" + Date.now(), { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (!data) return;
+            if (data.paused) pintar(data);
+            else quitar();
+          })
+          .catch(function () {});
+      }
+      desdeLocal();
+      desdeNube();
+      setInterval(desdeNube, 15000);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") desdeNube();
+      });
+      window.QB_CLOUD_PAUSE = { refresh: desdeNube, show: pintar };
+    })();
+  </script>
 
   <div class="app" id="app"></div>
 
