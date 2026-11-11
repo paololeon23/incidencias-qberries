@@ -137,6 +137,66 @@ body.is-desktop #transfer {
   border-radius: 16px;
   padding: 10px;
 }
+.pause-gate {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+  background:
+    radial-gradient(ellipse 90% 55% at 12% -10%, rgba(93, 178, 75, 0.18), transparent 55%),
+    linear-gradient(168deg, #F4FAF5 0%, #E8F2EA 42%, #FFFFFF 100%);
+}
+.pause-gate.is-on {
+  display: flex;
+}
+.pause-gate-inner {
+  width: min(420px, 100%);
+  text-align: center;
+}
+.pause-gate-logo {
+  display: block;
+  margin: 0 auto 16px;
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(31, 61, 42, 0.14);
+}
+.pause-gate-brand {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--qb-red);
+  margin-bottom: 12px;
+}
+.pause-gate-inner h1 {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--qb-forest);
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+.pause-gate-lead {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--qb-muted);
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 22em;
+}
+body.is-paused .app,
+body.is-paused .form-actions,
+body.is-paused .fab-wrap,
+body.is-paused .qb-loader,
+body.is-paused .desktop-gate,
+body.is-paused #picker,
+body.is-paused #help,
+body.is-paused #transfer,
+body.is-paused .qb-toast-stack {
+  display: none !important;
+}
 .desktop-gate-bg {
   position: absolute;
   inset: 0;

@@ -1,4 +1,4 @@
-const CACHE = "qb-compromiso-v14";
+const CACHE = "qb-compromiso-v16";
 
 const ASSETS = [
   "./",
@@ -15,6 +15,7 @@ const ASSETS = [
   "./assets/instalar-android.png",
   "./instalar.html",
   "./version.json",
+  "./status.json",
   "./icons/aprobacion.png",
   "./icons/mark.svg",
   "./icons/icon-192.png",
@@ -83,6 +84,21 @@ self.addEventListener("fetch", (event) => {
         return fresh;
       } catch (error) {
         return cached || new Response("", { status: 504, statusText: "offline" });
+      }
+    })());
+    return;
+  }
+
+  const path = new URL(request.url).pathname;
+  if (/\/(status|version)\.json$/i.test(path)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      try {
+        const fresh = await fetch(request, { cache: "no-store" });
+        if (fresh.ok) cache.put(request, fresh.clone());
+        return fresh;
+      } catch (error) {
+        return (await desdeCache(cache, request)) || new Response("{}", { status: 504, headers: { "Content-Type": "application/json" } });
       }
     })());
     return;

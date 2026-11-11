@@ -58,7 +58,11 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "9.1";
+  const APP_VERSION = "9.3";
+  const PAUSA_TEXTO = "Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión.";
+  function appCerrada() {
+    try { return !!JSON.parse(localStorage.getItem("qb-pause") || "null"); } catch (error) { return false; }
+  }
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -618,6 +622,7 @@
   }
 
   async function pushActa(acta, opts) {
+    if (appCerrada()) return false;
     const attempts = opts && opts.attempts ? opts.attempts : 2;
     const ms = opts && opts.ms ? opts.ms : 90000;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -675,6 +680,7 @@
   }
 
   async function flushPending(show) {
+    if (appCerrada()) return;
     if (!autoTransfer()) return;
     const queue = state.actas.filter(listoParaSubir);
     if (show && queue.length) openTransfer(queue.length);
@@ -697,6 +703,7 @@
   }
 
   async function pullCampo() {
+    if (appCerrada()) return;
     if (state.pulling) return;
     state.pulling = true;
     try {
@@ -3115,7 +3122,59 @@
     viewport.addEventListener("scroll", sync);
   }
 
+  function mostrarPausa(data) {
+    const box = document.getElementById("pause-gate");
+    const title = document.getElementById("pause-title");
+    const text = document.getElementById("pause-text");
+    if (title) title.textContent = (data && data.title) || "Sistema en pausa";
+    if (text) text.textContent = (data && data.text) || PAUSA_TEXTO;
+    if (box) {
+      box.hidden = false;
+      box.classList.add("is-on");
+    }
+    document.body.classList.add("is-paused");
+    document.body.dataset.qbScreen = "home";
+  }
+
+  function ocultarPausa() {
+    const box = document.getElementById("pause-gate");
+    if (box) {
+      box.classList.remove("is-on");
+      box.hidden = true;
+    }
+    document.body.classList.remove("is-paused");
+  }
+
+  async function leerPausaNube() {
+    try {
+      const response = await fetch(`./status.json?t=${Date.now()}`, { cache: "no-store", signal: netSignal(8000) });
+      if (!response.ok) throw new Error("status");
+      const data = await response.json();
+      if (data && data.paused) {
+        localStorage.setItem("qb-pause", JSON.stringify({
+          title: data.title || "Sistema en pausa",
+          text: data.text || PAUSA_TEXTO
+        }));
+        return { paused: true, title: data.title, text: data.text };
+      }
+      localStorage.removeItem("qb-pause");
+      return { paused: false };
+    } catch (error) {
+      try {
+        const saved = localStorage.getItem("qb-pause");
+        if (saved) return Object.assign({ paused: true }, JSON.parse(saved));
+      } catch (err) { /* si el guardado está dañado, se ignora */ }
+      return null;
+    }
+  }
+
   async function boot() {
+    const pausa = await leerPausaNube();
+    if (pausa && pausa.paused) {
+      mostrarPausa(pausa);
+      return;
+    }
+    ocultarPausa();
     try {
       await loadData();
       try {
