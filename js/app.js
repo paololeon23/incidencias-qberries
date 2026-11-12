@@ -58,11 +58,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "9.5";
-  const PAUSA_TEXTO = "Esta app ya no se usa. Por tema privado de la empresa queda cerrada. No se puede subir nada. Tus datos ya guardados siguen seguros. Gracias por tu comprensión.";
-  function appCerrada() {
-    return document.body.classList.contains("is-paused") || !!localStorage.getItem("qb-pause");
-  }
+  const APP_VERSION = "9.1";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -622,26 +618,13 @@
   }
 
   async function pushActa(acta, opts) {
-    if (appCerrada()) return false;
     const attempts = opts && opts.attempts ? opts.attempts : 2;
     const ms = opts && opts.ms ? opts.ms : 90000;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const response = await postActa(acta, netSignal(ms));
-        if (!response.ok) return false;
-        const text = await response.text();
-        try {
-          const data = JSON.parse(text);
-          if (data && (data.ok === false || data.paused)) {
-            const aviso = data.message || PAUSA_TEXTO;
-            if (window.QB_CLOUD_PAUSE && window.QB_CLOUD_PAUSE.show) {
-              window.QB_CLOUD_PAUSE.show({ title: "App fuera de uso", text: aviso });
-            }
-            toast(aviso, "warn");
-            return false;
-          }
-        } catch (error) { /* si no es JSON, con HTTP ok se acepta */ }
-        return true;
+        if (response.ok) return true;
+        return false;
       } catch (error) {
         if (attempt === attempts - 1) return false;
       }
@@ -692,7 +675,6 @@
   }
 
   async function flushPending(show) {
-    if (appCerrada()) return;
     if (!autoTransfer()) return;
     const queue = state.actas.filter(listoParaSubir);
     if (show && queue.length) openTransfer(queue.length);
@@ -715,7 +697,6 @@
   }
 
   async function pullCampo() {
-    if (appCerrada()) return;
     if (state.pulling) return;
     state.pulling = true;
     try {
@@ -2884,23 +2865,49 @@
 
   async function applyUpdate() {
     const label = document.getElementById("update-state");
-    if (label) label.textContent = "Buscando versión nueva…";
-    try {
-      if (navigator.serviceWorker) {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (reg) {
-          await reg.update();
-          if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    if (label) label.textContent = "Revisando la versión y el Excel…";
+    await checkUpdate();
+    if (!state.updateAvailable) {
+      if (label) label.textContent = "Pidiendo el Excel…";
+      try {
+        const resultado = await refrescarCampo();
+        if (!resultado.ok) {
+          if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
+          toast("El GET no respondió. Presiona otra vez.", "warn");
+          return;
         }
+        if (resultado.libres.length) {
+          if (label) label.textContent = `Listo en ${resultado.segundos} s. Suspensión liberada.`;
+          toast(`El Excel liberó la suspensión. GET ${resultado.segundos} s.`);
+          return;
+        }
+        if (resultado.cerrados.length) {
+          if (label) label.textContent = `Listo en ${resultado.segundos} s. Volvió a suspensión.`;
+          toast(`Otra vez en suspensión. GET ${resultado.segundos} s.`);
+          return;
+        }
+        if (label) label.textContent = `Está al día. GET ${resultado.segundos} s.`;
+        toast(`Excel revisado en ${resultado.segundos} s. Sin cambios.`);
+      } catch (error) {
+        if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
+        toast("El GET no respondió. Presiona otra vez.", "warn");
+      }
+      return;
+    }
+    setLoader(true, "Bajando la app");
+    try {
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+        if (reg && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
       }
       if ("caches" in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((key) => caches.delete(key)));
       }
-      toast("Actualizando…");
-      setTimeout(() => location.reload(), 500);
+      location.reload();
     } catch (error) {
-      if (label) label.textContent = "No se pudo actualizar. Revisa la señal.";
+      setLoader(false);
       toast("No se pudo bajar. Revisa la señal.", "warn");
     }
   }
@@ -3108,69 +3115,7 @@
     viewport.addEventListener("scroll", sync);
   }
 
-  function mostrarPausa(data) {
-    const box = document.getElementById("pause-gate");
-    const title = document.getElementById("pause-title");
-    const text = document.getElementById("pause-text");
-    if (title) title.textContent = (data && data.title) || "Sistema en pausa";
-    if (text) text.textContent = (data && data.text) || PAUSA_TEXTO;
-    if (box) {
-      box.hidden = false;
-      box.classList.add("is-on");
-    }
-    document.body.classList.add("is-paused");
-    document.body.dataset.qbScreen = "home";
-  }
-
-  function ocultarPausa() {
-    const box = document.getElementById("pause-gate");
-    if (box) {
-      box.classList.remove("is-on");
-      box.hidden = true;
-    }
-    document.body.classList.remove("is-paused");
-  }
-
-  async function leerPausaNube() {
-    try {
-      const response = await fetch(`./status.json?t=${Date.now()}`, { cache: "no-store", signal: netSignal(8000) });
-      if (!response.ok) throw new Error("status");
-      const data = await response.json();
-      if (data && data.paused) {
-        localStorage.setItem("qb-pause", JSON.stringify({
-          title: data.title || "Sistema en pausa",
-          text: data.text || PAUSA_TEXTO
-        }));
-        return { paused: true, title: data.title, text: data.text };
-      }
-      localStorage.removeItem("qb-pause");
-      return { paused: false };
-    } catch (error) {
-      try {
-        const saved = localStorage.getItem("qb-pause");
-        if (saved) return Object.assign({ paused: true }, JSON.parse(saved));
-      } catch (err) { /* si el guardado está dañado, se ignora */ }
-      return null;
-    }
-  }
-
   async function boot() {
-    if (window.QB_CLOUD_PAUSE && window.QB_CLOUD_PAUSE.refresh) {
-      await window.QB_CLOUD_PAUSE.refresh();
-    }
-    if (appCerrada()) {
-      const saved = (() => {
-        try { return JSON.parse(localStorage.getItem("qb-pause") || "null"); } catch (error) { return null; }
-      })();
-      mostrarPausa(saved || { title: "App fuera de uso", text: PAUSA_TEXTO });
-      return;
-    }
-    const pausa = await leerPausaNube();
-    if (pausa && pausa.paused) {
-      mostrarPausa(pausa);
-      return;
-    }
-    ocultarPausa();
     try {
       await loadData();
       try {
@@ -3232,5 +3177,10 @@
     }
   });
   bindViewport();
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
+  }
   boot();
 })();
