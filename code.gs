@@ -1,4 +1,18 @@
-/** Apps Script pegado al Excel INCIDENCIAS. No crea otra hoja: usa Hoja 1. */
+/** Apps Script pegado al Excel INCIDENCIAS.
+ *  Hoja 1 (antigua): archivo. No se escribe más ahí.
+ *  Hoja ACUMULADOS: cantidades por incidencia. Sin Llamada/Carta/DT. Sin duplicados. */
+var SHEET_ACTIVA = "ACUMULADOS";
+
+var COUNT_COLS = [
+  { id: "instruccion", header: "Instrucción" },
+  { id: "tardia", header: "Tardía" },
+  { id: "falta", header: "Inasistencia" },
+  { id: "epp", header: "EPP" },
+  { id: "bpa", header: "BPA" },
+  { id: "fruta", header: "Fruta" },
+  { id: "conducta", header: "Conducta" }
+];
+
 var HEADERS = [
   "Código",
   "Fecha",
@@ -6,24 +20,22 @@ var HEADERS = [
   "Trabajador",
   "DNI",
   "Cargo",
-  "Medida",
-  "Motivo",
+  "Nivel",
+  "Incidencia",
   "Responsable",
-  "DNI responsable",
-  "Llamada",
-  "Carta",
-  "DT",
+  "DNI responsable"
+].concat(COUNT_COLS.map(function (item) { return item.header; })).concat([
+  "Acumulado",
   "Texto"
-];
-
-var CHECKS = ["Llamada", "Carta", "DT"];
+]);
 
 function doGet(e) {
   var params = e && e.parameter ? e.parameter : {};
   return json_(withLock_(function () {
-    var sh = sheet_();
-    if (params.dni) return leerDni_(sh, String(params.dni));
-    return leerRecientes_(sh, 1);
+    var activa = sheetActiva_();
+    var archivo = sheetArchivo_();
+    if (params.dni) return leerDni_(activa, archivo, String(params.dni));
+    return leerRecientes_(activa, archivo, 1);
   }));
 }
 
@@ -35,7 +47,7 @@ function doPost(e) {
     body = {};
   }
   withLock_(function () {
-    var sh = sheet_();
+    var sh = sheetActiva_();
     if (body.action === "delete" && body.id) {
       borrarFila_(sh, body.id);
       return;
@@ -51,44 +63,166 @@ function doPost(e) {
   return json_({ ok: true });
 }
 
-/** Ejecutar una vez desde el editor: actualiza Hoja 1 sin crear otra. */
+/** Ejecutar una vez: recrea encabezados de ACUMULADOS (cantidades). No toca la hoja antigua. */
 function crearEncabezados() {
-  var sh = sheet_();
-  writeAll_(sh, readActas_(sh));
-}
-
-function sheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error("El script tiene que estar dentro del Excel INCIDENCIAS.");
-  var sh = ss.getSheets()[0];
-  var width = Math.max(sh.getLastColumn(), HEADERS.length);
-  var first = sh.getRange(1, 1, 1, width).getValues()[0];
-  var missing = HEADERS.some(function (name, index) { return first[index] !== name; });
-  if (missing) {
-    var saved = readActas_(sh);
-    sh.showColumns(1, width);
-    var extra = sh.getMaxColumns() - HEADERS.length;
-    if (extra > 0) sh.deleteColumns(HEADERS.length + 1, extra);
-    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-    sh.getRange(1, 1, 1, HEADERS.length)
-      .setFontWeight("bold")
-      .setBackground("#1F3D2A")
-      .setFontColor("#FFFFFF");
-    sh.setFrozenRows(1);
-    if (saved.length) writeAll_(sh, saved);
+  var sh = ss.getSheetByName(SHEET_ACTIVA);
+  if (!sh) sh = ss.insertSheet(SHEET_ACTIVA);
+  var saved = readActas_(sh);
+  sh.clear();
+  while (sh.getMaxColumns() < HEADERS.length) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+  if (sh.getMaxColumns() > HEADERS.length) {
+    sh.deleteColumns(HEADERS.length + 1, sh.getMaxColumns() - HEADERS.length);
+  }
+  sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  if (saved.length) writeAll_(sh, dedupeActas_(saved));
+  formatearHoja_(sh);
+}
+
+function sheetArchivo_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error("El script tiene que estar dentro del Excel INCIDENCIAS.");
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getName() !== SHEET_ACTIVA) return sheets[i];
+  }
+  return sheets[0] || null;
+}
+
+function sheetActiva_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error("El script tiene que estar dentro del Excel INCIDENCIAS.");
+  var sh = ss.getSheetByName(SHEET_ACTIVA);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_ACTIVA);
+    asegurarEncabezados_(sh, true);
+  } else {
+    asegurarEncabezados_(sh, false);
   }
   return sh;
+}
+
+function asegurarEncabezados_(sh, force) {
+  var width = Math.max(sh.getLastColumn(), HEADERS.length);
+  var first = width ? sh.getRange(1, 1, 1, width).getValues()[0] : [];
+  var missing = force || !first.length || HEADERS.some(function (name, index) {
+    return first[index] !== name;
+  });
+  if (!missing) return;
+  var saved = readActas_(sh);
+  sh.clear();
+  while (sh.getMaxColumns() < HEADERS.length) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+  if (sh.getMaxColumns() > HEADERS.length) {
+    sh.deleteColumns(HEADERS.length + 1, sh.getMaxColumns() - HEADERS.length);
+  }
+  sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  if (saved.length) writeAll_(sh, dedupeActas_(saved));
+  else formatearHoja_(sh);
+}
+
+function formatearHoja_(sh) {
+  if (!sh) return;
+  try { sh.setTabColor("#1F8A3B"); } catch (e) {}
+  sh.setFrozenRows(1);
+  sh.setRowHeight(1, 36);
+  var head = sh.getRange(1, 1, 1, HEADERS.length);
+  head.setValues([HEADERS]);
+  head
+    .setFontFamily("Arial")
+    .setFontSize(9)
+    .setFontWeight("bold")
+    .setFontColor("#FFFFFF")
+    .setBackground("#1F3D2A")
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setWrap(true);
+  var widths = [118, 92, 58, 200, 86, 84, 120, 160, 170, 100, 78, 64, 88, 52, 52, 58, 78, 78, 300];
+  for (var i = 0; i < HEADERS.length; i++) {
+    sh.setColumnWidth(i + 1, widths[i] || 90);
+  }
+  var last = Math.max(sh.getLastRow(), 2);
+  var rows = Math.max(last - 1, 1);
+  var body = sh.getRange(2, 1, rows, HEADERS.length);
+  body
+    .setFontFamily("Arial")
+    .setFontSize(10)
+    .setFontColor("#2C3330")
+    .setVerticalAlignment("middle")
+    .setWrap(false);
+  sh.getRange(2, colIndex_("Fecha"), rows, 2).setHorizontalAlignment("center");
+  sh.getRange(2, colIndex_("DNI"), rows, 1).setHorizontalAlignment("center");
+  sh.getRange(2, colIndex_("Instrucción"), rows, COUNT_COLS.length + 1).setHorizontalAlignment("center");
+  sh.getRange(2, colIndex_("Texto"), rows, 1).setWrap(false);
+  sh.getRange(2, 1, Math.max(rows, 400), HEADERS.length)
+    .setBorder(true, true, true, true, true, true, "#D7DED8", SpreadsheetApp.BorderStyle.SOLID);
+  aplicarZebra_(sh);
+  colorearCantidades_(sh);
+  try {
+    var filter = sh.getFilter();
+    if (filter) filter.remove();
+    sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), HEADERS.length).createFilter();
+  } catch (err) {}
+}
+
+function aplicarZebra_(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return;
+  for (var r = 2; r <= last; r++) {
+    sh.getRange(r, 1, 1, HEADERS.length).setBackground(r % 2 === 0 ? "#F7FAF7" : "#FFFFFF");
+  }
+}
+
+function colorearCantidades_(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return;
+  var start = colIndex_("Instrucción");
+  var end = colIndex_("Acumulado");
+  var values = sh.getRange(2, start, last - 1, end - start + 1).getValues();
+  var backgrounds = values.map(function (row) {
+    return row.map(function (value) {
+      var n = Number(value) || 0;
+      if (n >= 3) return "#FDECEC";
+      if (n === 2) return "#FFF8EB";
+      if (n === 1) return "#EAF5EC";
+      return null;
+    });
+  });
+  sh.getRange(2, start, last - 1, end - start + 1).setBackgrounds(backgrounds);
+}
+
+function pintarCantidades_(sh, fila, conteos, acumulado) {
+  var start = colIndex_("Instrucción");
+  var colors = COUNT_COLS.map(function (item) {
+    var n = Number((conteos && conteos[item.id]) || 0);
+    if (n >= 3) return "#FDECEC";
+    if (n === 2) return "#FFF8EB";
+    if (n === 1) return "#EAF5EC";
+    return fila % 2 === 0 ? "#F7FAF7" : "#FFFFFF";
+  });
+  var maxN = Number(acumulado) || 0;
+  colors.push(maxN >= 3 ? "#FDECEC" : maxN === 2 ? "#FFF8EB" : maxN === 1 ? "#EAF5EC" : (fila % 2 === 0 ? "#F7FAF7" : "#FFFFFF"));
+  sh.getRange(fila, start, 1, COUNT_COLS.length + 1)
+    .setBackgrounds([colors])
+    .setHorizontalAlignment("center")
+    .setFontWeight("bold");
 }
 
 function colIndex_(name) {
   return HEADERS.indexOf(name) + 1;
 }
 
+function headerRow_(sh) {
+  var lastCol = Math.max(sh.getLastColumn(), 1);
+  return sh.getRange(1, 1, 1, lastCol).getValues()[0];
+}
+
 function readActas_(sh) {
+  if (!sh) return [];
   var last = sh.getLastRow();
   if (last < 2) return [];
-  var header = sh.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-  var rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var header = headerRow_(sh);
+  var rows = sh.getRange(2, 1, last - 1, header.length).getValues();
   return rows.reduce(function (list, row) {
     var acta = actaDeFila_(header, row);
     if (acta) list.push(acta);
@@ -96,34 +230,59 @@ function readActas_(sh) {
   }, []);
 }
 
-function leerRecientes_(sh, dias) {
-  var last = sh.getLastRow();
-  if (last < 2) return [];
-  var start = Math.max(2, last - 399);
-  var header = sh.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-  var rows = sh.getRange(start, 1, last - start + 1, HEADERS.length).getValues();
-  return rows.reduce(function (list, row) {
-    var acta = actaDeFila_(header, row);
-    if (acta && esReciente_(row[1], dias)) list.push(acta);
-    return list;
-  }, []);
-}
-
-function leerDni_(sh, dni) {
-  var last = sh.getLastRow();
-  if (last < 2) return [];
-  var header = sh.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-  var values = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
-  var col = header.indexOf("DNI");
-  if (col < 0) return [];
-  var wanted = String(dni);
-  var list = [];
-  for (var i = 0; i < values.length; i++) {
-    if (String(values[i][col]) !== wanted) continue;
-    var acta = actaDeFila_(header, values[i]);
-    if (acta) list.push(acta);
+function dedupeActas_(lista) {
+  var seen = {};
+  var out = [];
+  for (var i = lista.length - 1; i >= 0; i--) {
+    var acta = lista[i];
+    if (!acta || !acta.id) continue;
+    var key = String(acta.id);
+    if (seen[key]) continue;
+    seen[key] = true;
+    out.unshift(acta);
   }
-  return list;
+  return out;
+}
+
+function leerRecientes_(activa, archivo, dias) {
+  var recientes = [];
+  function tomar(sh) {
+    if (!sh) return;
+    var last = sh.getLastRow();
+    if (last < 2) return;
+    var start = Math.max(2, last - 399);
+    var header = headerRow_(sh);
+    var rows = sh.getRange(start, 1, last - start + 1, header.length).getValues();
+    rows.forEach(function (row) {
+      var acta = actaDeFila_(header, row);
+      if (acta && esReciente_(row[1], dias)) recientes.push(acta);
+    });
+  }
+  tomar(activa);
+  tomar(archivo);
+  return dedupeActas_(recientes);
+}
+
+function leerDni_(activa, archivo, dni) {
+  var list = [];
+  function tomar(sh) {
+    if (!sh) return;
+    var last = sh.getLastRow();
+    if (last < 2) return;
+    var header = headerRow_(sh);
+    var values = sh.getRange(2, 1, last - 1, header.length).getValues();
+    var col = header.indexOf("DNI");
+    if (col < 0) return;
+    var wanted = String(dni);
+    for (var i = 0; i < values.length; i++) {
+      if (String(values[i][col]) !== wanted) continue;
+      var acta = actaDeFila_(header, values[i]);
+      if (acta) list.push(acta);
+    }
+  }
+  tomar(archivo);
+  tomar(activa);
+  return dedupeActas_(list);
 }
 
 function esReciente_(fecha, dias) {
@@ -152,15 +311,20 @@ function guardarFila_(sh, acta) {
       }
     }
   }
-  sh.getRange(fila, 1, 1, HEADERS.length).setValues([rowFromActa_(acta)]);
-  var checks = sh.getRange(fila, colIndex_("Llamada"), 1, CHECKS.length);
-  checks.insertCheckboxes();
-  var columnas = acta.columnas || {};
-  checks.setBackgrounds([[
-    columnas.llamada ? "#1F8A3B" : "#D64545",
-    columnas.escrita ? "#1F8A3B" : "#D64545",
-    columnas.dt ? "#1F8A3B" : "#D64545"
-  ]]);
+  var conteos = conteosDe_(acta);
+  var acumulado = acumuladoDe_(conteos);
+  var rango = sh.getRange(fila, 1, 1, HEADERS.length);
+  rango.setValues([rowFromActa_(acta)]);
+  rango
+    .setFontFamily("Arial")
+    .setFontSize(10)
+    .setFontColor("#2C3330")
+    .setVerticalAlignment("middle")
+    .setBorder(true, true, true, true, false, false, "#D7DED8", SpreadsheetApp.BorderStyle.SOLID);
+  rango.setBackground(fila % 2 === 0 ? "#F7FAF7" : "#FFFFFF");
+  sh.getRange(fila, colIndex_("Fecha"), 1, 2).setHorizontalAlignment("center");
+  sh.getRange(fila, colIndex_("DNI")).setHorizontalAlignment("center");
+  pintarCantidades_(sh, fila, conteos, acumulado);
   sh.getRange(fila, colIndex_("Texto")).setWrap(false);
 }
 
@@ -173,6 +337,48 @@ function borrarFila_(sh, id) {
   }
 }
 
+function numero_(value) {
+  var n = Number(value);
+  return isFinite(n) && n > 0 ? n : 0;
+}
+
+function conteosDe_(acta) {
+  var conteos = {};
+  COUNT_COLS.forEach(function (item) { conteos[item.id] = 0; });
+  var fuente = acta && acta.conteos ? acta.conteos : {};
+  COUNT_COLS.forEach(function (item) {
+    conteos[item.id] = numero_(fuente[item.id]);
+  });
+  if (Object.keys(fuente).some(function (key) { return numero_(fuente[key]) > 0; })) return conteos;
+  var ids = [];
+  if (Array.isArray(acta.criterios)) {
+    ids = acta.criterios.map(function (item) { return item && item.id; }).filter(Boolean);
+  } else if (acta.motivoId) {
+    ids = String(acta.motivoId).split(",").map(function (part) { return part.trim(); }).filter(Boolean);
+  }
+  ids.forEach(function (id) {
+    if (Object.prototype.hasOwnProperty.call(conteos, id)) conteos[id] = Math.max(conteos[id], 1);
+  });
+  return conteos;
+}
+
+function acumuladoDe_(conteos) {
+  var max = 0;
+  COUNT_COLS.forEach(function (item) {
+    var n = numero_(conteos[item.id]);
+    if (n > max) max = n;
+  });
+  return max;
+}
+
+function nivelLabel_(acta, acumulado) {
+  if (acta && (acta.tipo === "medida" || acta.tipo === "dt")) return "Medida";
+  if (acta && (acta.tipo === "critico" || acta.tipo === "escrita")) return "Estado crítico";
+  if (acumulado >= 3) return "Medida";
+  if (acumulado >= 2) return "Estado crítico";
+  return "Llamada incidencia";
+}
+
 function actaDeFila_(header, row) {
   function cell(name) {
     var index = header.indexOf(name);
@@ -180,12 +386,19 @@ function actaDeFila_(header, row) {
   }
   var id = String(cell("Código") || "");
   if (!id) return null;
-  var medida = String(cell("Medida") || "");
-  var tipo = medida === "Suspensión" ? "dt" : medida === "Llamada escrita" ? "escrita" : "llamada";
+  var medida = String(cell("Nivel") || cell("Medida") || "");
+  var tipo = medida === "Medida" || medida === "Suspensión" ? "medida"
+    : medida === "Estado crítico" || medida === "Llamada escrita" ? "critico"
+    : "incidencia";
   function marcado(name) {
     var value = cell(name);
     return value === true || value === "SÍ" || value === "SI";
   }
+  var conteos = {};
+  COUNT_COLS.forEach(function (item) {
+    conteos[item.id] = numero_(cell(item.header));
+  });
+  var acumulado = numero_(cell("Acumulado")) || acumuladoDe_(conteos);
   var nota = textoCorrido_(cell("Descripción"));
   var texto = textoCorrido_(cell("Texto"));
   if (nota && texto.toLowerCase().indexOf(nota.toLowerCase()) === -1) texto = textoCorrido_(texto + " " + nota);
@@ -194,7 +407,9 @@ function actaDeFila_(header, row) {
     fecha: fechaCorta_(cell("Fecha")),
     hora: horaCorta_(cell("Hora")),
     tipo: tipo,
-    motivoLabel: String(cell("Motivo") || ""),
+    motivoLabel: String(cell("Incidencia") || cell("Motivo") || ""),
+    conteos: conteos,
+    acumulado: acumulado,
     descripcion: "",
     texto: texto,
     trabajador: {
@@ -207,44 +422,42 @@ function actaDeFila_(header, row) {
       dni: String(cell("DNI responsable") || "")
     },
     columnas: {
-      llamada: marcado("Llamada"),
-      escrita: marcado("Carta"),
-      dt: marcado("DT")
+      llamada: marcado("Llamada") || acumulado >= 1,
+      escrita: marcado("Carta") || acumulado >= 2,
+      dt: marcado("DT") || acumulado >= 3
     },
     progreso: {
-      llamada: marcado("Llamada"),
-      escrita: marcado("Carta"),
-      dt: marcado("DT")
+      llamada: marcado("Llamada") || acumulado >= 1,
+      escrita: marcado("Carta") || acumulado >= 2,
+      dt: marcado("DT") || acumulado >= 3
     }
   };
 }
 
 function writeAll_(sh, actas) {
-  var last = Math.max(sh.getLastRow(), actas.length + 1);
+  var clean = dedupeActas_(actas || []);
+  var last = Math.max(sh.getLastRow(), clean.length + 1);
   if (last > 1) {
     sh.getRange(2, 1, last - 1, HEADERS.length).clearContent().setBackground(null);
   }
-  if (!actas.length) return;
-  var rows = actas.map(rowFromActa_);
-  sh.getRange(2, 1, actas.length, HEADERS.length).setValues(rows);
-  var start = colIndex_("Llamada");
-  var checks = sh.getRange(2, start, actas.length, CHECKS.length);
-  checks.insertCheckboxes();
-  checks.setBackgrounds(actas.map(function (acta) {
-    var columnas = acta.columnas || {};
-    return CHECKS.map(function (name) {
-      var on = name === "Llamada" ? columnas.llamada : name === "Carta" ? columnas.escrita : columnas.dt;
-      return on ? "#1F8A3B" : "#D64545";
-    });
-  }));
-  sh.getRange(2, colIndex_("Texto"), actas.length, 1).setWrap(false);
+  if (!clean.length) {
+    formatearHoja_(sh);
+    return;
+  }
+  var rows = clean.map(rowFromActa_);
+  sh.getRange(2, 1, clean.length, HEADERS.length).setValues(rows);
+  formatearHoja_(sh);
+  for (var i = 0; i < clean.length; i++) {
+    var conteos = conteosDe_(clean[i]);
+    pintarCantidades_(sh, i + 2, conteos, acumuladoDe_(conteos));
+  }
 }
 
 function rowFromActa_(acta) {
   var trabajador = acta.trabajador || {};
   var responsable = acta.supervisor || {};
-  var columnas = acta.columnas || {};
-  var medida = acta.tipo === "dt" ? "Suspensión" : acta.tipo === "escrita" ? "Llamada escrita" : "Llamada de atención";
+  var conteos = conteosDe_(acta);
+  var acumulado = acumuladoDe_(conteos);
   return [
     acta.id || "",
     acta.fecha || "",
@@ -252,15 +465,16 @@ function rowFromActa_(acta) {
     trabajador.nombre || "",
     trabajador.dni || "",
     trabajador.cargo || "",
-    medida,
+    nivelLabel_(acta, acumulado),
     acta.motivoLabel || "",
     responsable.nombre || "",
-    responsable.dni || "",
-    !!columnas.llamada,
-    !!columnas.escrita,
-    !!columnas.dt,
+    responsable.dni || ""
+  ].concat(COUNT_COLS.map(function (item) {
+    return numero_(conteos[item.id]) || "";
+  })).concat([
+    acumulado || "",
     textoFinal_(acta)
-  ];
+  ]);
 }
 
 function fechaCorta_(value) {
@@ -280,15 +494,6 @@ function horaCorta_(value) {
   return ("0" + match[1]).slice(-2) + ":" + match[2];
 }
 
-function unir_(anterior, nuevo) {
-  var a = textoCorrido_(anterior);
-  var b = textoCorrido_(nuevo);
-  if (!a) return b;
-  if (!b || a === b || a.indexOf(b) !== -1) return a;
-  if (b.indexOf(a) !== -1) return b;
-  return a + " - " + b;
-}
-
 function textoFinal_(acta) {
   var texto = textoCorrido_(acta.texto);
   var nota = textoCorrido_(acta.descripcion);
@@ -298,29 +503,6 @@ function textoFinal_(acta) {
 
 function textoCorrido_(text) {
   return String(text || "").replace(/\s*\n+\s*/g, " ").replace(/\s{2,}/g, " ").trim();
-}
-
-function columnasDe_(actas, dni) {
-  var lista = actas.filter(function (acta) {
-    return acta.trabajador && acta.trabajador.dni === dni && acta.tipo !== "conforme";
-  });
-  return {
-    llamada: lista.some(function (acta) { return acta.tipo === "llamada" || (acta.columnas && acta.columnas.llamada); }),
-    escrita: lista.some(function (acta) { return acta.tipo === "escrita" || (acta.columnas && acta.columnas.escrita); }),
-    dt: lista.some(function (acta) { return acta.tipo === "dt" || (acta.columnas && acta.columnas.dt); })
-  };
-}
-
-function onEdit(e) {
-  if (!e || !e.range) return;
-  var sh = e.range.getSheet();
-  var ss = sh.getParent();
-  if (ss.getSheets()[0].getName() !== sh.getName()) return;
-  if (e.range.getRow() < 2) return;
-  var header = String(sh.getRange(1, e.range.getColumn()).getValue() || "");
-  if (CHECKS.indexOf(header) === -1) return;
-  var on = e.range.getValue() === true;
-  e.range.setBackground(on ? "#1F8A3B" : "#D64545");
 }
 
 function withLock_(fn) {

@@ -118,11 +118,13 @@ body.is-desktop .desktop-gate {
 }
 html.is-desktop .fab-wrap,
 html.is-desktop .form-actions,
+html.is-desktop .bottom-nav,
 html.is-desktop #picker,
 html.is-desktop #help,
 html.is-desktop #transfer,
 body.is-desktop .fab-wrap,
 body.is-desktop .form-actions,
+body.is-desktop .bottom-nav,
 body.is-desktop #picker,
 body.is-desktop #help,
 body.is-desktop #transfer {
@@ -479,11 +481,11 @@ body.is-desktop #transfer {
 .fab-wrap {
   position: fixed;
   right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(16px + var(--nav-h, 64px) + env(safe-area-inset-bottom, 0px));
   z-index: 10020;
 }
 body[data-qb-screen="form"] .fab-wrap {
-  bottom: calc(108px + var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(16px + var(--nav-h, 64px) + var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
 }
 .fab-options {
   width: 52px;
@@ -2021,9 +2023,11 @@ body[data-qb-screen="form"] .fab-wrap {
   width: 100%;
   margin: 0;
   padding: 12px 14px calc(14px + var(--safe-bottom));
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid var(--qb-line);
-  box-shadow: 0 -6px 20px rgba(31, 61, 42, 0.08);
+  box-shadow: 0 -8px 24px rgba(31, 61, 42, 0.08);
   display: grid;
   grid-template-columns: 1fr 1.35fr;
   gap: 8px;
@@ -2031,6 +2035,12 @@ body[data-qb-screen="form"] .fab-wrap {
   isolation: isolate;
   contain: layout paint style;
   transition: bottom 0.26s cubic-bezier(0.22, 0.8, 0.28, 1);
+}
+.form-actions:empty {
+  display: none !important;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
 }
 body > .form-actions { display: none; }
 body[data-qb-screen="form"] > .form-actions:not(.dual) { display: grid; }
@@ -2048,6 +2058,95 @@ body[data-qb-screen="resumen"] > .form-actions.dual { display: grid; }
 .form-actions .btn {
   transition: none;
   animation: none;
+}
+
+/* Bottom nav — Registro / Historial */
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: min(440px, 100%);
+  height: calc(var(--nav-h, 64px) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  padding: 0 12px calc(8px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  z-index: 10030;
+  pointer-events: none;
+}
+.bottom-nav[hidden] { display: none !important; }
+.bottom-nav-inner {
+  pointer-events: auto;
+  width: min(360px, 100%);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--qb-line);
+  box-shadow: 0 -2px 20px rgba(31, 61, 42, 0.1);
+}
+.nav-btn {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--qb-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-btn .nav-ico {
+  width: 32px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+.nav-btn .nav-label { line-height: 1; }
+.nav-btn.is-active {
+  color: var(--qb-forest);
+  background: rgba(31, 61, 42, 0.08);
+}
+.nav-btn.is-active .nav-ico {
+  background: var(--qb-forest);
+  color: #fff;
+}
+.nav-btn.is-active svg {
+  color: #fff;
+  stroke: #fff;
+}
+.flow-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--qb-line);
+  box-shadow: 0 8px 20px rgba(31, 61, 42, 0.06);
+}
+.flow-actions .btn { width: 100%; }
+.flow-actions.is-acta {
+  grid-template-columns: 0.9fr 1.2fr 52px;
 }
 body.kb-open .app {
   overflow: hidden;
@@ -2997,7 +3096,7 @@ html.precise-open body {
 
 .qb-toast-stack {
   position: fixed;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(16px + var(--nav-h, 64px) + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 12200;
@@ -3008,7 +3107,7 @@ html.precise-open body {
   pointer-events: none;
 }
 body[data-qb-screen="form"] .qb-toast-stack {
-  bottom: calc(96px + var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(16px + var(--nav-h, 64px) + var(--kb, 0px) + env(safe-area-inset-bottom, 0px));
 }
 .qb-toast-item {
   pointer-events: auto;

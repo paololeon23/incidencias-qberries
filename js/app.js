@@ -1,11 +1,10 @@
 /* Q Berries · Compromiso laboral
-   Flujo: 1 persona (padrón) → 2 lote → 3 evaluación → 4 acta firmada.
-   El texto de la llamada reproduce el cuaderno de campo. */
+   Cada incidencia se acumula sola. 1 observación, 2 crítico, 3 medida. */
 (function () {
   "use strict";
 
   const CRITERIOS = [
-    { id: "rojizo", label: "Rojizo", umbral: 5, hint: "Color rojo en la selección. Es el motivo del cuaderno." },
+    { id: "rojizo", label: "Rojizo", umbral: 5, hint: "Color rojo en la selección. Es la incidencia del cuaderno." },
     { id: "verde", label: "Verde", umbral: 3, hint: "Fruta inmadura" },
     { id: "sobremaduro", label: "Sobremaduro", umbral: 4, hint: "Fruta blanda o pasada" },
     { id: "dano", label: "Daño", umbral: 3, hint: "Golpe, rajado o daño mecánico" },
@@ -18,10 +17,12 @@
     { short: "Checklist", title: "Checklist" }
   ];
 
+  const MAX_MISMO_MOTIVO = 3;
+
   const MEDIDAS = [
-    { id: "llamada", label: "Llamada de atención", limite: 5, vez: "1.ª vez", destino: "Queda en la app", rank: 1 },
-    { id: "escrita", label: "Llamada escrita", limite: 10, vez: "Si se repite · carta", destino: "Carta de compromiso", rank: 2 },
-    { id: "dt", label: "Suspensión", limite: 15, vez: "Si se repite otra vez · DT", destino: "Se envía a RRHH", rank: 3 }
+    { id: "incidencia", label: "Llamada incidencia", limite: 1, vez: "1.ª vez de la misma incidencia", destino: "Observación en campo", rank: 1 },
+    { id: "critico", label: "Estado crítico", limite: 2, vez: "2.ª vez de la misma incidencia", destino: "Seguimiento crítico", rank: 2 },
+    { id: "medida", label: "Medida", limite: 3, vez: "3.ª vez · tolerancia de referencia", destino: "Registro para revisión", rank: 3 }
   ];
 
   const SUCESOS = [
@@ -44,6 +45,7 @@
     pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     check: '<path d="m5 12 5 5L20 7"/>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/>',
+    "file-plus": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15h6"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.8.3-1.2.9-1.2 1.6V14"/><path d="M12 17h.01"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     alert: '<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.8 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.8a2 2 0 0 0-3.4 0Z"/>',
@@ -53,12 +55,14 @@
     pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>',
     scan: '<path d="M4 4h6v6H4z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/><path d="M14 14h2.2v2.2H14z"/><path d="M17.8 14H20v2.2h-2.2z"/><path d="M14 17.8h2.2V20H14z"/><path d="M17.8 17.8H20V20h-2.2z"/>',
     more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
-    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    camera: '<path d="M14.5 4h-5l-1.5 2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.5-2Z"/><circle cx="12" cy="13" r="3.5"/>',
+    verify: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>'
   };
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "9.1";
+  const APP_VERSION = "10.0";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -77,6 +81,8 @@
     histFilter: "todas",
     histQuery: "",
     histPage: 1,
+    histIncOpen: false,
+    verifyOk: false,
     viewing: null,
     saving: false,
     campoOnline: false,
@@ -97,6 +103,8 @@
   let deferredPrompt = null;
   let picker = { kind: "", items: [] };
   let askResolve = null;
+  let qrMode = "open";
+  let voiceReady = null;
 
   function emptyDraft() {
     return {
@@ -168,6 +176,25 @@
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     return `${day}/${month}/${date.getFullYear()}`;
+  }
+
+  function horaAmPm(value) {
+    const base = cortoHora(value);
+    const match = String(base).match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return base;
+    let h = Number(match[1]);
+    const m = match[2];
+    const sufijo = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (!h) h = 12;
+    return `${String(h).padStart(2, "0")}:${m} ${sufijo}`;
+  }
+
+  function fechaHoraActa(acta) {
+    const fecha = cortoFecha(acta && (acta.fecha || acta.fechaLarga)) || "";
+    const hora = horaAmPm(acta && acta.hora);
+    if (fecha && hora) return `${fecha} - HORA : ${hora}`;
+    return fecha || hora || "";
   }
 
   function diaDe(acta) {
@@ -313,8 +340,16 @@
     return "";
   }
 
+  function tipoActa(acta) {
+    const tipo = acta && acta.tipo;
+    if (tipo === "medida" || tipo === "dt") return "medida";
+    if (tipo === "critico" || tipo === "escrita") return "critico";
+    return "incidencia";
+  }
+
   function medidaById(id) {
-    return MEDIDAS.find((item) => item.id === id) || MEDIDAS[0];
+    const key = id === "dt" ? "medida" : id === "escrita" || id === "llamada" ? (id === "escrita" ? "critico" : "incidencia") : id;
+    return MEDIDAS.find((item) => item.id === key) || MEDIDAS[0];
   }
 
   function criterioById(id) {
@@ -328,95 +363,85 @@
     });
   }
 
-  function columnasDe(dni) {
-    const prev = actasDe(dni);
+  function idsCriterioActa(acta) {
+    if (!acta) return [];
+    if (Array.isArray(acta.criterios) && acta.criterios.length) {
+      return [...new Set(acta.criterios.map((item) => item && item.id).filter(Boolean))];
+    }
+    const fromId = String(acta.motivoId || "").split(",").map((id) => id.trim()).filter(Boolean);
+    if (fromId.length) return [...new Set(fromId)];
+    return [...new Set(String(acta.motivoLabel || "").split(",").map((part) => {
+      const label = part.trim().toLowerCase();
+      const found = SUCESOS.find((item) => item.label.toLowerCase() === label);
+      return found ? found.id : "";
+    }).filter(Boolean))];
+  }
+
+  function conteoCriterios(dni) {
+    const counts = {};
+    SUCESOS.forEach((item) => { counts[item.id] = 0; });
+    actasDe(dni).forEach((acta) => {
+      idsCriterioActa(acta).forEach((id) => {
+        if (Object.prototype.hasOwnProperty.call(counts, id)) counts[id] += 1;
+      });
+    });
+    return counts;
+  }
+
+  function maxConteo(dni) {
+    const counts = Object.values(conteoCriterios(dni));
+    return counts.length ? Math.max.apply(null, counts) : 0;
+  }
+
+  function nivelDeConteo(n) {
+    if (n >= MAX_MISMO_MOTIVO) return "rojo";
+    if (n >= 2) return "amarillo";
+    return "verde";
+  }
+
+  function nivelAuditoria(dni) {
+    const counts = conteoCriterios(dni);
+    const max = maxConteo(dni);
+    const top = Object.keys(counts).filter((id) => counts[id] === max && max > 0).map((id) => {
+      const item = criterioById(id);
+      return { id, label: item ? item.label : id, n: counts[id] };
+    });
+    const color = nivelDeConteo(max);
     return {
-      llamada: prev.some((acta) => acta.tipo === "llamada" || (acta.columnas && acta.columnas.llamada)),
-      escrita: prev.some((acta) => acta.tipo === "escrita" || (acta.columnas && acta.columnas.escrita)),
-      dt: prev.some((acta) => acta.tipo === "dt" || (acta.columnas && acta.columnas.dt))
+      color,
+      max,
+      counts,
+      top,
+      label: color === "rojo"
+        ? (max > MAX_MISMO_MOTIVO ? `Medida · ${max}` : "Medida")
+        : color === "amarillo" ? "Crítico" : max ? "Observación" : "Sin incidencia",
+      medidaId: color === "rojo" ? "medida" : color === "amarillo" ? "critico" : "incidencia",
+      pasoMargen: max > MAX_MISMO_MOTIVO
+    };
+  }
+
+  function columnasDe(dni) {
+    const nivel = nivelAuditoria(dni);
+    return {
+      llamada: nivel.max >= 1,
+      escrita: nivel.max >= 2,
+      dt: nivel.max >= 3
     };
   }
 
   function faseDe(dni) {
-    const cols = columnasDe(dni);
-    if (!cols.llamada) return "llamada";
-    if (!cols.escrita) return "escrita";
-    return "dt";
-  }
-
-  function dtEncendido(value) {
-    return value === true || value === "SÍ" || value === "SI" || value === "TRUE" || value === "true" || value === 1;
-  }
-
-  function dtBloqueado(dni) {
-    const ultima = actasDe(dni)
-      .filter((acta) => acta.tipo === "dt")
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-    if (!ultima) return false;
-    return dtEncendido(ultima.columnas && ultima.columnas.dt);
-  }
-
-  function soltarDt(dni) {
-    const buscado = String(dni || "");
-    state.actas.forEach((acta) => {
-      if (!acta.trabajador || String(acta.trabajador.dni) !== buscado || acta.tipo !== "dt") return;
-      acta.columnas = Object.assign({}, acta.columnas || {}, { dt: false });
-      acta.progreso = Object.assign({}, acta.progreso || {}, { dt: false });
-    });
-  }
-
-  function aplicarDtServidor(lista) {
-    const porDni = new Map();
-    (lista || []).forEach((acta) => {
-      if (!acta || acta.tipo !== "dt" || !acta.trabajador || !acta.trabajador.dni) return;
-      const dni = String(acta.trabajador.dni);
-      const on = !acta.columnas || dtEncendido(acta.columnas.dt);
-      porDni.set(dni, porDni.get(dni) === true || on);
-    });
-    porDni.forEach((on, dni) => {
-      if (on) cerrarDt(dni);
-      else soltarDt(dni);
-    });
-  }
-
-  function cerrarDt(dni) {
-    const ultima = actasDe(dni)
-      .filter((acta) => acta.tipo === "dt")
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-    if (!ultima) return;
-    ultima.columnas = Object.assign({}, ultima.columnas || {}, { dt: true });
-    ultima.progreso = Object.assign({}, ultima.progreso || {}, { dt: true });
-  }
-
-  function progresoPropio(previo, medida) {
-    const orden = ["llamada", "escrita", "dt"];
-    const previoIdx = previo && orden.includes(previo.tipo) ? orden.indexOf(previo.tipo) : -1;
-    const ahora = orden.indexOf(medida);
-    const hasta = Math.max(previoIdx, ahora);
-    return {
-      llamada: hasta >= 0,
-      escrita: hasta >= 1,
-      dt: hasta >= 2
-    };
-  }
-
-  function casoVigente(dni, responsableDni) {
-    const lista = actasDe(dni)
-      .filter((acta) => acta.supervisor && acta.supervisor.dni === responsableDni)
-      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    if (!lista.length) return null;
-    const cols = {
-      llamada: lista.some((acta) => acta.tipo === "llamada" || (acta.progreso && acta.progreso.llamada)),
-      escrita: lista.some((acta) => acta.tipo === "escrita" || (acta.progreso && acta.progreso.escrita)),
-      dt: lista.some((acta) => acta.tipo === "dt" || (acta.progreso && acta.progreso.dt))
-    };
-    if (cols.llamada && cols.escrita && cols.dt) return null;
-    return lista[0];
+    return nivelAuditoria(dni).medidaId;
   }
 
   function medidaSugerida() {
     const dni = state.draft.trabajador ? state.draft.trabajador.dni : "";
-    return faseDe(dni);
+    const marcados = state.draft.marcados || [];
+    if (!dni || !marcados.length) return "incidencia";
+    const counts = conteoCriterios(dni);
+    const peor = Math.max.apply(null, marcados.map((id) => (counts[id] || 0) + 1));
+    if (peor >= MAX_MISMO_MOTIVO) return "medida";
+    if (peor >= 2) return "critico";
+    return "incidencia";
   }
 
   function medidaActual() {
@@ -424,10 +449,39 @@
   }
 
   function porqueMedida() {
-    const fase = medidaActual();
-    if (fase === "llamada") return "Fase 1. Marca el suceso. No se salta a la carta.";
-    if (fase === "escrita") return "Fase 2. La llamada de atención ya está. Ahora la carta.";
-    return "Fase 3. Llamada y carta ya están. Ahora DT.";
+    const nivel = state.draft.trabajador ? nivelAuditoria(state.draft.trabajador.dni) : null;
+    if (!nivel || !nivel.max) return "Cada incidencia se acumula por tipo. Tolerancia de referencia: 3. Se puede seguir registrando.";
+    if (nivel.pasoMargen) return `Acumulado ${nivel.max} de la misma incidencia. Sigue en rojo. Se puede registrar más.`;
+    if (nivel.color === "rojo") return `Acumulado 3 en ${nivel.top.map((item) => item.label).join(", ")}. Nivel medida. Se puede seguir registrando.`;
+    if (nivel.color === "amarillo") return `Estado crítico: ${nivel.top.map((item) => `${item.label} ×${item.n}`).join(", ")}. Una más de la misma incidencia marca nivel medida.`;
+    return `Observación activa. Incidencias: ${nivel.top.map((item) => `${item.label} ×${item.n}`).join(", ")}.`;
+  }
+
+  function textoConteo(n) {
+    if (n > MAX_MISMO_MOTIVO) return `${n} · pasó 3`;
+    return `${n}/${MAX_MISMO_MOTIVO}`;
+  }
+
+  function semaforoHtml(dni) {
+    const nivel = nivelAuditoria(dni);
+    const pos = nivel.color === "rojo" ? 100 : nivel.color === "amarillo" ? 55 : nivel.max ? 22 : 8;
+    const detalle = nivel.top.length
+      ? nivel.top.map((item) => `${item.label} ${textoConteo(item.n)}`).join(" · ")
+      : "Sin incidencia";
+    return `
+      <div class="audit-meter is-${nivel.color}" aria-label="Estado de incidencia">
+        <div class="audit-meter-top">
+          <strong>${esc(nivel.label)}</strong>
+          <span>${esc(detalle)}</span>
+        </div>
+        <div class="audit-track">
+          <span class="audit-seg is-verde"></span>
+          <span class="audit-seg is-amarillo"></span>
+          <span class="audit-seg is-rojo"></span>
+          <span class="audit-thumb" style="left:${pos}%"></span>
+        </div>
+        <div class="audit-scale"><span>1 observación</span><span>2 crítico</span><span>3+ referencia</span></div>
+      </div>`;
   }
 
   function motivosMarcados() {
@@ -446,17 +500,26 @@
   function buildTexto() {
     const person = state.draft.trabajador;
     const nombre = titleCase(person ? person.nombre : "el cosechador");
-    const motivos = motivosMarcados().map((item) => item.label.toLowerCase());
-    const motivo = motivos.length ? joinAnd(motivos) : "el suceso";
+    const motivos = motivosMarcados().map((item) => item.label);
+    const motivo = motivos.length ? joinAnd(motivos) : "el suceso registrado";
     const extra = notaAparte(state.draft.descripcion);
     const medida = medidaActual();
-    if (medida === "dt") {
-      return `Se escala a Dirección Técnica la suspensión de ${nombre} por ${motivo}. El caso se envía a RRHH.${extra}`;
+    if (medida === "medida") {
+      const peores = (state.draft.marcados || []).map((id) => {
+        const n = (conteoCriterios(person ? person.dni : "")[id] || 0) + 1;
+        const item = criterioById(id);
+        return { label: item ? item.label : id, n };
+      }).sort((a, b) => b.n - a.n);
+      const top = peores[0];
+      const cuento = top && top.n > MAX_MISMO_MOTIVO
+        ? `Acumulado: ${top.n} en ${top.label} (tolerancia de referencia: 3).`
+        : "Acumulado: 3 de la misma incidencia (tolerancia de referencia).";
+      return `Se registra incidencia en nivel medida a ${nombre}. Incidencia: ${motivo}. ${cuento} Queda constancia formal del registro.${extra}`;
     }
-    if (medida === "escrita") {
-      return `Se deja llamada escrita, carta de compromiso, a ${nombre} por ${motivo}, lo cual se compromete a mejorar.${extra}`;
+    if (medida === "critico") {
+      return `Se registra llamada de incidencia a ${nombre}. Incidencia: ${motivo}. Es la segunda vez de la misma incidencia. Queda constancia formal del registro.${extra}`;
     }
-    return `Se le da una llamada de atención a: ${nombre} por ${motivo}, lo cual se compromete a mejorar.${extra}`;
+    return `Se registra llamada de incidencia a ${nombre}. Incidencia: ${motivo}. Queda constancia del registro.${extra}`;
   }
 
   function hasDraft() {
@@ -515,6 +578,8 @@
     state.manualOpen = false;
     state.manualNombre = "";
     state.signed = false;
+    state.histIncOpen = false;
+    state.verifyOk = false;
     sessionStorage.removeItem("qb-draft");
   }
 
@@ -702,27 +767,13 @@
     try {
       const signal = netSignal(10000);
       const marcas = Date.now();
-      const dnis = [...new Set(state.actas.filter((acta) => acta.tipo === "dt" && acta.trabajador).map((acta) => String(acta.trabajador.dni)))].slice(0, 8);
-      const pedidos = [fetch(conConsulta_(syncUrl(), { dias: "1", t: marcas }), { cache: "no-store", redirect: "follow", signal })];
-      dnis.forEach((dni) => pedidos.push(fetch(conConsulta_(syncUrl(), { dni, t: marcas }), { cache: "no-store", redirect: "follow", signal })));
-      const responses = await Promise.all(pedidos.map((pedido) => pedido.catch(() => null)));
-      let ok = false;
-      for (const response of responses) {
-        if (!response || !response.ok) continue;
-        const remote = await response.json().catch(() => null);
-        if (!Array.isArray(remote)) continue;
-        ok = true;
-        mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
-      }
-      if (!ok) throw new Error("api");
+      const response = await fetch(conConsulta_(syncUrl(), { dias: "1", t: marcas }), { cache: "no-store", redirect: "follow", signal });
+      if (!response.ok) throw new Error("api");
+      const remote = await response.json();
+      const lista = Array.isArray(remote) ? remote : [];
+      mezclarActas(lista.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
       state.campoOnline = true;
       idbReplace(state.actas);
-      const abierto = state.draft.trabajador && state.draft.trabajador.dni;
-      if (state.screen === "flow" && abierto && dtBloqueado(abierto)) {
-        clearDraft(true);
-        go("home");
-        avisoDt();
-      }
       await flushPending();
     } catch (error) {
       state.campoOnline = false;
@@ -730,7 +781,7 @@
     } finally {
       state.pulling = false;
       if (state.screen === "home") paintHomeSearch();
-      if (state.screen === "flow" && state.step === 1) paintWorkerSearch();
+      if (state.screen === "flow" && state.draft.trabajador) paintChecklist();
       paintNet();
     }
   }
@@ -747,17 +798,10 @@
       if (!acta || !acta.id) return;
       completarActa(acta);
       const local = map.get(acta.id);
-      if (local && acta.columnas && Object.prototype.hasOwnProperty.call(acta.columnas, "dt")) {
-        const dt = acta.columnas.dt === true || acta.columnas.dt === "SÍ" || acta.columnas.dt === "SI";
-        local.columnas = Object.assign({}, local.columnas || {}, { dt });
-        local.progreso = Object.assign({}, local.progreso || {}, { dt });
-        acta.columnas.dt = dt;
-      }
       if (local && (local.confirmado === false || local.pending || local.synced !== true)) return;
       map.set(acta.id, acta);
     });
     state.actas = [...map.values()].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    aplicarDtServidor(lista);
   }
 
   function yaLoTengo(dni) {
@@ -768,20 +812,8 @@
     });
   }
 
-  function tuvoDt(dni) {
-    return actasDe(dni).some((acta) => acta.tipo === "dt");
-  }
-
-  function servidorBloquea(lista, dni) {
-    const filas = (lista || []).filter((acta) => {
-      return acta && acta.tipo === "dt" && acta.trabajador && String(acta.trabajador.dni) === String(dni);
-    });
-    if (!filas.length) return null;
-    return filas.some((acta) => !acta.columnas || dtEncendido(acta.columnas.dt));
-  }
-
   async function asegurarHistoria(dni) {
-    if (yaLoTengo(dni) && !tuvoDt(dni)) return;
+    if (yaLoTengo(dni)) return;
     await historiaDe(dni);
   }
 
@@ -1023,9 +1055,9 @@
   function viewHome() {
     const today = jornadaHoy();
     const delDia = state.actas.filter((acta) => jornadaDe(acta) === today);
-    const llamadas = delDia.filter((acta) => acta.tipo === "llamada").length;
-    const cartas = delDia.filter((acta) => acta.tipo === "escrita").length;
-    const dts = delDia.filter((acta) => acta.tipo === "dt").length;
+    const incidencias = delDia.filter((acta) => acta.tipo === "incidencia" || acta.tipo === "llamada").length;
+    const criticos = delDia.filter((acta) => acta.tipo === "critico" || acta.tipo === "escrita").length;
+    const medidas = delDia.filter((acta) => acta.tipo === "medida" || acta.tipo === "dt").length;
     const ultima = state.actas[0];
     return `
       <section class="screen active" id="screen-home">
@@ -1050,17 +1082,17 @@
               ${icon("chevron", 18)}
             </button>
           </section>
-          <section class="section-card finder">
+          <section class="section-card finder${state.draft.supervisor ? "" : " is-locked"}">
             <div class="section-head">
               <h2 class="section-title">Ingresa el DNI de quien no cumple</h2>
-              <p class="section-sub" id="campo-chip">Escribe el DNI o el apellido del personal que no cumple las reglas.</p>
+              <p class="section-sub" id="campo-chip">${state.draft.supervisor ? "Escribe el DNI o el apellido del personal que no cumple las reglas." : "Primero elige al supervisor responsable. Sin eso no se busca DNI."}</p>
             </div>
             <div class="finder-call">
               <img class="finder-boss" src="${IMG.supervisor}" alt="">
-              <button type="button" class="qr-scan-btn" data-act="scan-qr" aria-label="Escanear QR">${icon("scan", 20)}</button>
+              <button type="button" class="qr-scan-btn" data-act="scan-qr" aria-label="Escanear QR" ${state.draft.supervisor ? "" : "disabled"}>${icon("scan", 20)}</button>
             </div>
             <div class="finder-row">
-              <input id="home-q" class="name-input" type="search" autocomplete="off" placeholder="DNI o apellido" value="${esc(state.query)}" aria-label="Buscar cosechador">
+              <input id="home-q" class="name-input" type="search" autocomplete="off" placeholder="${state.draft.supervisor ? "DNI o apellido" : "Primero elige al responsable"}" value="${esc(state.query)}" aria-label="Buscar cosechador" ${state.draft.supervisor ? "" : "readonly"}>
             </div>
             <div id="home-out"></div>
           </section>
@@ -1076,31 +1108,31 @@
           </div>
           <section class="flow-map" aria-label="Flujo de campo">
             <div class="flow-map-kicker">De qué trata</div>
-            <h3>Llamada, carta y DT</h3>
-            ${flowStep(1, "Llamada de atención", "Primera vez. Se marca el suceso.", false)}
-            ${flowStep(2, "Carta de compromiso", "Solo si la llamada ya está. No se salta.", false)}
-            ${flowStep(3, "Dirección Técnica", "Solo si la llamada y la carta ya están.", true)}
+            <h3>Suma de la misma incidencia</h3>
+            ${flowStep(1, "Llamada incidencia", "1.ª vez de la misma incidencia. Observación en verde.", false)}
+            ${flowStep(2, "Estado crítico", "2.ª vez de la misma incidencia. Amarillo. No se mezclan tipos.", false)}
+            ${flowStep(3, "Medida", "Desde la 3.ª es tolerancia de referencia. Se puede seguir registrando.", true)}
           </section>
           <section class="ops-panel">
             <div class="ops-head">
               <div>
                 <div class="ops-kicker">Hoy en este teléfono</div>
-                <h3>${dts ? "Hay casos en DT" : llamadas || cartas ? "Hay medidas hoy" : "Panel del día"}</h3>
+                <h3>${medidas ? "Hay medidas hoy" : criticos ? "Hay casos críticos" : incidencias ? "Hay incidencias hoy" : "Panel del día"}</h3>
               </div>
               <div class="ops-date">${esc(shortToday())}</div>
             </div>
             <div class="ops-kpis ops-kpis-3">
               <div class="kpi">
-                <span class="kpi-val">${llamadas}</span>
-                <span class="kpi-label">Llamadas</span>
+                <span class="kpi-val">${incidencias}</span>
+                <span class="kpi-label">Incidencias</span>
               </div>
-              <div class="kpi ${cartas ? "warn" : ""}">
-                <span class="kpi-val">${cartas}</span>
-                <span class="kpi-label">Cartas</span>
+              <div class="kpi ${criticos ? "warn" : ""}">
+                <span class="kpi-val">${criticos}</span>
+                <span class="kpi-label">Críticos</span>
               </div>
               <div class="kpi kpi-sum">
-                <span class="kpi-val">${dts}</span>
-                <span class="kpi-label">DT</span>
+                <span class="kpi-val">${medidas}</span>
+                <span class="kpi-label">Medidas</span>
               </div>
             </div>
             <div class="ops-section-label">Última acta</div>
@@ -1129,7 +1161,7 @@
     return `
       <button type="button" class="ops-last-card card-hit" data-act="open-acta" data-id="${esc(acta.id)}" data-from="home">
         <div class="ops-last-top">
-          <span class="ops-last-tag">${esc(medidaById(acta.tipo === "conforme" ? "llamada" : acta.tipo).label)}</span>
+          <span class="ops-last-tag">${esc(medidaById(tipoActa(acta)).label)}</span>
           <span class="ops-last-time">${esc(cortoHora(acta.hora))} · ${esc(cortoFecha(acta.fecha))}</span>
         </div>
         <div class="ops-last-body">
@@ -1174,9 +1206,8 @@
   }
 
   function personCard(person) {
-    const fase = faseDe(person.dni);
+    const nivel = nivelAuditoria(person.dni);
     const fuera = person.fueraDePadron;
-    const next = medidaById(fase).label;
     return `
       <article class="person-card ${fuera ? "is-out" : ""}">
         <div class="avatar" style="background:${avatarColor(person.dni)}">${esc(initials(person.nombre))}</div>
@@ -1184,7 +1215,7 @@
           <strong>${esc(titleCase(person.nombre))}</strong>
           <p>DNI ${esc(person.dni)}${person.cargo ? ` · ${esc(titleCase(person.cargo))}` : ""}</p>
           <div class="person-tags">
-            <span class="tag ${fase !== "llamada" ? "bad" : ""}">Fase: ${esc(next)}</span>
+            <span class="tag ${nivel.color !== "verde" ? "bad" : ""}">${esc(nivel.label)}</span>
           </div>
           <button type="button" class="person-change" data-act="clear-worker">Elegir otra persona</button>
         </div>
@@ -1192,21 +1223,20 @@
   }
 
   function faseCorta(id) {
-    if (id === "escrita") return "Carta";
-    if (id === "dt") return "DT";
-    return "Llamada";
+    if (id === "medida" || id === "dt") return "Medida";
+    if (id === "critico" || id === "escrita") return "Crítico";
+    return "Incidencia";
   }
 
   function fasePill(dni) {
-    if (dtBloqueado(dni)) return `<span class="fase-pill is-lock">Bloqueado</span>`;
-    const fase = faseDe(dni);
-    return `<span class="fase-pill is-${fase}">${esc(faseCorta(fase))}</span>`;
+    const nivel = nivelAuditoria(dni);
+    return `<span class="fase-pill is-${nivel.color}">${esc(nivel.label)}</span>`;
   }
 
   function filaTrabajador(worker) {
-    const bloqueado = dtBloqueado(worker.dni);
+    const nivel = nivelAuditoria(worker.dni);
     return `
-      <button type="button" class="hit-row${bloqueado ? " is-blocked" : ""}" data-act="abrir" data-dni="${esc(worker.dni)}">
+      <button type="button" class="hit-row is-${nivel.color}" data-act="abrir" data-dni="${esc(worker.dni)}">
         <span>
           <strong>${esc(titleCase(worker.nombre))}</strong>
           <small>DNI ${esc(worker.dni)}</small>
@@ -1215,9 +1245,24 @@
       </button>`;
   }
 
+  function tieneResponsable() {
+    return !!(state.draft.supervisor && state.draft.supervisor.dni);
+  }
+
+  function pideResponsable() {
+    toast("Elige al supervisor responsable", "warn");
+    openPicker("supervisor");
+  }
+
   function paintHomeSearch() {
     const slot = document.getElementById("home-out");
     if (!slot) return;
+    if (!tieneResponsable()) {
+      slot.innerHTML = state.query.trim()
+        ? `<p class="search-empty">Primero elige al supervisor responsable.</p>`
+        : "";
+      return;
+    }
     const query = state.query.trim();
     if (!query) {
       slot.innerHTML = "";
@@ -1243,24 +1288,10 @@
       : `<p class="search-empty">Nadie coincide.</p>`;
   }
 
-  function avisoDt() {
-    toast("Sigue en suspensión. Solo Recursos Humanos lo libera, quitando el check de DT.", "warn");
-  }
-
   async function abrirTrabajador(worker) {
-    if (tuvoDt(worker.dni) || dtBloqueado(worker.dni)) {
-      const remote = await historiaDe(worker.dni);
-      const mando = servidorBloquea(remote, worker.dni);
-      if (mando === true) {
-        cerrarDt(worker.dni);
-        avisoDt();
-        return;
-      }
-      if (mando === false) soltarDt(worker.dni);
-      else if (dtBloqueado(worker.dni)) {
-        avisoDt();
-        return;
-      }
+    if (!tieneResponsable()) {
+      pideResponsable();
+      return;
     }
     const evaluador = state.draft.evaluador;
     const supervisor = state.draft.supervisor;
@@ -1272,11 +1303,11 @@
     state.searchMode = "dni";
     state.step = 2;
     state.maxReached = 2;
+    state.histIncOpen = false;
     persistDraft();
     go("flow");
-    const antes = faseDe(worker.dni);
     asegurarHistoria(worker.dni).then(() => {
-      if (state.screen === "flow" && state.draft.trabajador && state.draft.trabajador.dni === worker.dni && faseDe(worker.dni) !== antes) render();
+      if (state.screen === "flow" && state.draft.trabajador && state.draft.trabajador.dni === worker.dni) render();
     });
   }
 
@@ -1320,13 +1351,38 @@
     slot.innerHTML = `<div class="result-list">${hits.map(filaTrabajador).join("")}</div>`;
   }
 
+  function historialIncidenciaHtml(dni) {
+    const lista = actasDe(dni).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const open = !!state.histIncOpen;
+    const cuerpo = !lista.length
+      ? `<p class="hist-inc-empty">Sin incidencia</p>`
+      : `<div class="hist-inc-list">${lista.map((acta) => `
+          <button type="button" class="hist-inc-item" data-act="open-acta" data-id="${esc(acta.id)}" data-from="flow">
+            <span>
+              <strong>${esc(medidaById(tipoActa(acta)).label)}</strong>
+              <small>${esc(cortoFecha(acta.fecha))} · ${esc(cortoHora(acta.hora))}${acta.motivoLabel ? ` · ${esc(acta.motivoLabel)}` : ""}</small>
+            </span>
+            <em>${esc(acta.id)}</em>
+          </button>`).join("")}</div>`;
+    return `
+      <section class="section-card compact hist-inc-card">
+        <button type="button" class="hist-inc-head ${open ? "is-open" : ""}" data-act="toggle-hist-inc" aria-expanded="${open ? "true" : "false"}">
+          <span>
+            <strong>Historial de incidencia</strong>
+            <small>${lista.length ? `${lista.length} registro${lista.length === 1 ? "" : "s"}` : "Sin incidencia"}</small>
+          </span>
+          ${icon("chevron", 18)}
+        </button>
+        <div class="hist-inc-body" ${open ? "" : "hidden"}>${cuerpo}</div>
+      </section>`;
+  }
+
   function stepChecklist() {
     const person = state.draft.trabajador;
-    const fase = medidaActual();
-    const prev = actasDe(person.dni);
-    const hecha = (id) => prev.some((acta) => acta.tipo === id);
     const marcados = state.draft.marcados || [];
     const responsable = state.draft.supervisor;
+    const counts = conteoCriterios(person.dni);
+    const sugerida = medidaById(medidaActual());
     return `
       <section class="section-card compact">
         <button type="button" class="who-line resp-pick" data-act="open-supervisor">
@@ -1339,61 +1395,40 @@
           <strong>${esc(titleCase(person.nombre))}</strong>
           <span>DNI ${esc(person.dni)}${person.fueraDePadron ? " · Fuera del padrón" : ""}</span>
         </div>
+        ${semaforoHtml(person.dni)}
       </section>
+      ${historialIncidenciaHtml(person.dni)}
       <section class="section-card">
         <div class="section-head">
-          <h2 class="section-title">Disciplinaria</h2>
-          <p class="section-sub">Identificación, suceso y la medida que toca.</p>
+          <h2 class="section-title">Llamada incidencia</h2>
+          <p class="section-sub">${esc(porqueMedida())}</p>
         </div>
-        <div class="fase-cols" aria-label="Fases de esta persona">
-          ${[["llamada", "Llamada"], ["escrita", "Carta"], ["dt", "DT"]].map(([id, label]) => {
-            const on = id === "dt" ? dtBloqueado(person.dni) : hecha(id);
-            return `<div class="fase-col ${on ? "is-on" : ""}">${on ? `<img class="fase-check" src="${IMG.check}" alt="">` : "—"} ${esc(label)}</div>`;
-          }).join("")}
-        </div>
-        <div class="fase-list">
-          ${MEDIDAS.map((item) => {
-            const abierta = item.id === fase;
-            const lista = item.id === "dt" ? dtBloqueado(person.dni) : hecha(item.id);
-            const bloqueada = !abierta && !lista;
-            return `
-              <div class="fase ${abierta ? "is-open" : ""} ${lista ? "is-done" : ""} ${bloqueada ? "is-locked" : ""}">
-                <button type="button" class="fase-head" data-act="fase" data-fase="${item.id}">
-                  <span>
-                    <strong>${esc(item.label)}</strong>
-                    <small>${lista ? "Ya registrada" : abierta ? (item.id === "escrita" ? "Escanea el QR del carnet" : "Marca el suceso") : "Primero la fase anterior"}</small>
-                  </span>
-                  <span class="fase-state">${lista ? "Lista" : abierta ? "Abierta" : "Cerrada"}</span>
-                </button>
-                ${abierta ? `
-                  <div class="fase-body">
-                    ${SUCESOS.reduce((html, criterio, index) => {
-                      const titulo = index === 0 || SUCESOS[index - 1].grupo !== criterio.grupo
-                        ? `<p class="suceso-grupo">${esc(criterio.grupo)}</p>`
-                        : "";
-                      return html + titulo + `
-                      <label class="criterio" data-act="criterio">
-                        <input type="checkbox" data-criterio="${criterio.id}" ${marcados.includes(criterio.id) ? "checked" : ""}>
-                        <span>${esc(criterio.label)}</span>
-                      </label>`;
-                    }, "")}
-                    <label class="field">
-                      <span>Descripción del suceso</span>
-                      <textarea id="suceso-nota" maxlength="180" placeholder="Qué pasó">${esc(state.draft.descripcion)}</textarea>
-                    </label>
-                    ${item.id === "escrita" ? `
-                      <div class="finder-row carnet-scan">
-                        <label class="carnet-row is-show" data-act="carnet">
-                          <input type="checkbox" id="carnet-visto" ${state.draft.carnetVisto ? "checked" : ""}>
-                          <span>Carnet visto en presencia</span>
-                        </label>
-                        <button type="button" class="qr-scan-btn ${state.draft.qrOk ? "is-ok" : ""}" data-act="scan-qr" aria-label="Escanear QR">
-                          ${icon(state.draft.qrOk ? "check" : "scan", 20)}
-                        </button>
-                      </div>` : ""}
-                  </div>` : ""}
-              </div>`;
-          }).join("")}
+        <div class="fase is-open">
+          <div class="fase-head is-static">
+            <span>
+              <strong>${esc(sugerida.label)}</strong>
+              <small>${esc(sugerida.vez)}</small>
+            </span>
+            <span class="fase-state">Abierta</span>
+          </div>
+          <div class="fase-body">
+            <p class="suceso-grupo">Marca el suceso. Cada ítem suma solo al mismo tipo.</p>
+            ${SUCESOS.map((criterio) => {
+              const n = counts[criterio.id] || 0;
+              const next = marcados.includes(criterio.id) ? n + 1 : n;
+              const tone = nivelDeConteo(Math.max(n, next));
+              return `
+                <label class="criterio is-${tone}" data-act="criterio">
+                  <input type="checkbox" data-criterio="${criterio.id}" ${marcados.includes(criterio.id) ? "checked" : ""}>
+                  <span>${esc(criterio.label)}</span>
+                  <em class="criterio-count">${esc(textoConteo(n))}</em>
+                </label>`;
+            }).join("")}
+            <label class="field">
+              <span>Descripción del suceso</span>
+              <textarea id="suceso-nota" maxlength="180" placeholder="Qué pasó">${esc(state.draft.descripcion)}</textarea>
+            </label>
+          </div>
         </div>
       </section>`;
   }
@@ -1401,7 +1436,11 @@
   function paintChecklist() {
     const n = (state.draft.marcados || []).length;
     const sub = document.querySelector("#screen-flow .section-sub");
-    if (sub) sub.textContent = n ? `Identificación, suceso y la medida. ${n} marcado${n === 1 ? "" : "s"}.` : "Identificación, suceso y la medida que toca.";
+    if (sub) sub.textContent = n ? `${porqueMedida()} · ${n} marcado${n === 1 ? "" : "s"}.` : porqueMedida();
+    const meter = document.querySelector("#screen-flow .audit-meter");
+    if (meter && state.draft.trabajador) {
+      meter.outerHTML = semaforoHtml(state.draft.trabajador.dni);
+    }
   }
 
   function stepEval() {
@@ -1418,11 +1457,11 @@
       </section>
       <section class="section-card">
         <div class="section-head">
-          <h2 class="section-title">Otro motivo</h2>
+          <h2 class="section-title">Otra incidencia</h2>
           <p class="section-sub">Si la llamada no es por un porcentaje. Ejemplo: no cumplió la instrucción de selección.</p>
         </div>
         <label class="field">
-          <span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden">Otro motivo</span>
+          <span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden">Otra incidencia</span>
           <textarea id="otro" maxlength="180" placeholder="Opcional">${esc(state.draft.otro)}</textarea>
         </label>
       </section>
@@ -1481,7 +1520,7 @@
   function evalMessage() {
     if (invalidPct()) return { ok: false, cls: "is-bad", msg: "El porcentaje va de 0 a 100." };
     const any = measured().length > 0 || String(state.draft.otro || "").trim();
-    if (!any) return { ok: false, cls: "", msg: "Ingresa al menos un porcentaje, o un motivo escrito." };
+    if (!any) return { ok: false, cls: "", msg: "Ingresa al menos un porcentaje, o una incidencia escrita." };
     if (needsLlamada()) return { ok: true, cls: "is-warn", msg: "Pasa el umbral. El siguiente paso arma la llamada y pide la firma." };
     return { ok: true, cls: "is-ok", msg: "Dentro del umbral. Se puede guardar la evaluación sin llamada." };
   }
@@ -1531,15 +1570,15 @@
   function viewActa() {
     const acta = state.viewing;
     if (!acta) return "";
-    const medida = medidaById(acta.tipo === "conforme" ? "llamada" : acta.tipo);
-    const rank = medida.rank;
+    const medida = medidaById(tipoActa(acta));
     const previas = state.actas.filter((item) => item.id !== acta.id && item.trabajador && item.trabajador.dni === acta.trabajador.dni && item.tipo !== "conforme");
+    const nivel = nivelAuditoria(acta.trabajador.dni);
     return `
       <section class="screen active" id="screen-acta">
         ${header({
           compact: true,
           back: "back",
-          title: "RRHH",
+          title: "Registro",
           sub: acta.id,
           net: false,
           tools: [
@@ -1551,50 +1590,57 @@
           <div class="form-body">
             <article class="acta-paper is-company" id="print-acta">
               <div class="acta-brand">
-                <strong>Q Berries</strong>
-                <span>Licapa · Compromiso de trabajo</span>
+                <div class="acta-brand-main">
+                  <strong>Q Berries</strong>
+                  <span>Licapa · Compromiso de trabajo</span>
+                </div>
+                <em class="acta-doc-tag">Registro formal</em>
               </div>
-              <h2 class="acta-title">${esc(medida.label)}</h2>
-              <p class="acta-body">${esc(acta.texto)}</p>
-              <div class="acta-meta">
-                <div>${esc(acta.fechaLarga || cortoFecha(acta.fecha))} · ${esc(cortoHora(acta.hora))}</div>
-                <div>${esc(titleCase(acta.trabajador.nombre))}${acta.trabajador.cargo ? ` · ${esc(titleCase(acta.trabajador.cargo))}` : ""}</div>
-                ${acta.supervisor ? `<div>Responsable: ${esc(titleCase(acta.supervisor.nombre))}</div>` : ""}
-                ${typeof acta.porcentaje === "number" ? `<div>Porcentaje: ${esc(fmtPct(acta.porcentaje))}% · límite de esta medida ${medida.limite}%</div>` : ""}
-                <div>Medida aplicada: sí · ${esc(medida.label)}</div>
-                ${acta.qrOk ? `<div>Presencia formalizada con QR del carnet</div>` : ""}
-                ${acta.carnetVisto ? `<div>Carnet visto en presencia</div>` : ""}
+              <div class="acta-sheet">
+                <p class="acta-kicker">Registro de campo</p>
+                <h2 class="acta-title">${esc(medida.label)}</h2>
+                <p class="acta-body">${esc(acta.texto)}</p>
+                <div class="acta-meta" role="list">
+                  <div class="acta-row" role="listitem"><span>Fecha</span><strong>${esc(fechaHoraActa(acta))}</strong></div>
+                  <div class="acta-row" role="listitem"><span>Trabajador</span><strong>${esc(titleCase(acta.trabajador.nombre))}</strong></div>
+                  <div class="acta-row" role="listitem"><span>Cargo</span><strong>${esc(titleCase(acta.trabajador.cargo || "Cosecha"))}</strong></div>
+                  <div class="acta-row" role="listitem"><span>DNI</span><strong class="acta-dni-val">${esc(acta.trabajador.dni)}</strong></div>
+                  ${acta.supervisor ? `<div class="acta-row" role="listitem"><span>Responsable</span><strong>${esc(titleCase(acta.supervisor.nombre))}</strong></div>` : ""}
+                  <div class="acta-row" role="listitem"><span>Registro</span><strong>${esc(medida.label)}</strong></div>
+                  ${acta.motivoLabel ? `<div class="acta-row" role="listitem"><span>Incidencia</span><strong>${esc(acta.motivoLabel)}</strong></div>` : ""}
+                </div>
+                <footer class="acta-foot">
+                  <span>Constancia en este teléfono</span>
+                  <strong class="acta-id">${esc(acta.id)}</strong>
+                </footer>
               </div>
-              <div class="acta-dni">DNI: ${esc(acta.trabajador.dni)}</div>
-              <div class="acta-id">${esc(acta.id)}</div>
             </article>
             <section class="section-card">
               <div class="section-head">
                 <h2 class="section-title">Estado en campo</h2>
                 <p class="section-sub">${previas.length ? `${previas.length} registro${previas.length === 1 ? "" : "s"} anterior${previas.length === 1 ? "" : "es"} de esta persona` : "Primer registro de esta persona"}</p>
               </div>
-              <div class="ladder">
-                ${MEDIDAS.map((item) => {
-                  const now = item.rank === rank;
-                  const done = item.rank < rank;
-                  return `<div class="ladder-item ${now ? "is-now" : ""} ${done ? "is-done" : ""}">
-                    <span class="ladder-dot">${done ? "✓" : item.rank}</span>
-                    <div>
-                      <strong>${esc(item.label)}</strong>
-                      <p>${now ? "Ahora" : done ? "Alcanzada" : "Cerrada"} · ${esc(item.vez)}</p>
-                    </div>
-                  </div>`;
+              ${semaforoHtml(acta.trabajador.dni)}
+              <div class="audit-resumen" aria-label="Resumen de incidencias">
+                <div class="audit-resumen-head">
+                  <strong>Resumen de incidencias</strong>
+                  <span>${esc(nivel.label)}</span>
+                </div>
+                ${SUCESOS.map((item) => {
+                  const n = nivel.counts[item.id] || 0;
+                  const tone = nivelDeConteo(n);
+                  return `
+                    <div class="audit-row is-${tone}">
+                      <span>${esc(item.label)}</span>
+                      <strong>${n ? n : "Sin incidencia"}</strong>
+                    </div>`;
                 }).join("")}
               </div>
-              <div class="fase-cols" aria-label="Tres fases">
-                ${[["llamada", "Llamada"], ["escrita", "Carta"], ["dt", "DT"]].map(([id, label]) => {
-                  const on = !!(acta.columnas && acta.columnas[id]) || actasDe(acta.trabajador.dni).some((item) => item.tipo === id);
-                  return `<div class="fase-col ${on ? "is-on" : ""}">${on ? `<img class="fase-check" src="${IMG.check}" alt="">` : "—"} ${esc(label)}</div>`;
-                }).join("")}
+              <p class="audit-note is-${nivel.color}">${nivel.max ? `Acumulado de la misma incidencia: ${nivel.max}. Tolerancia de referencia: 3.` : "Sin incidencia registrada en este teléfono."}</p>
+              <div class="confirm-block">
+                <p class="confirm-hint">${state.verifyOk ? "Identidad validada con carnet. Puede confirmar la lectura." : "Escanee el carnet con la cámara para validar a la persona y desbloquear la confirmación."}</p>
+                <button type="button" class="btn btn-primary dt-send" data-act="confirmar" ${state.verifyOk ? "" : "disabled"}>Confirmar lectura</button>
               </div>
-              ${acta.tipo === "dt"
-                ? `<button type="button" class="btn btn-primary dt-send" data-act="enviar-dt">${acta.responsableDt ? "DT ya es responsable · reenviar" : "DT responsable y enviar"}</button>${acta.responsableDt ? `<p class="dt-note">Dirección Técnica quedó responsable de este caso.</p>` : ""}`
-                : `<button type="button" class="btn btn-primary dt-send" data-act="confirmar">Confirmar lectura</button>`}
             </section>
           </div>
         </div>
@@ -1606,18 +1652,20 @@
       <section class="screen active" id="screen-historial">
         ${header({
           compact: true,
-          back: "home",
           title: "Historial",
           sub: "Actas de este teléfono",
-          net: false
+          net: false,
+          tools: [
+            { act: "help", icon: "settings", label: "Ajustes" }
+          ]
         })}
         <div class="panel-scroll">
           <div class="uploads-wrap">
             <div class="hist-tools">
               <input id="hist-q" class="hist-search" type="search" placeholder="DNI o apellido" value="${esc(state.histQuery)}" autocomplete="off">
               <div class="filters" id="hist-filters">
-                ${["hoy", "llamada", "escrita", "dt", "todas"].map((key) => {
-                  const label = { hoy: "Hoy", llamada: "Llamadas", escrita: "Cartas", dt: "DT", todas: "Todas" }[key];
+                ${["hoy", "incidencia", "critico", "medida", "todas"].map((key) => {
+                  const label = { hoy: "Hoy", incidencia: "Incidencias", critico: "Críticos", medida: "Medidas", todas: "Todas" }[key];
                   return `<button type="button" data-act="filter" data-filter="${key}" class="${state.histFilter === key ? "is-on" : ""}">${label}</button>`;
                 }).join("")}
               </div>
@@ -1637,9 +1685,9 @@
     const today = jornadaHoy();
     return state.actas.filter((acta) => {
       if (jornadaDe(acta) !== today) return false;
-      if (state.histFilter === "llamada" && acta.tipo !== "llamada") return false;
-      if (state.histFilter === "escrita" && acta.tipo !== "escrita") return false;
-      if (state.histFilter === "dt" && acta.tipo !== "dt") return false;
+      if (state.histFilter === "incidencia" && tipoActa(acta) !== "incidencia") return false;
+      if (state.histFilter === "critico" && tipoActa(acta) !== "critico") return false;
+      if (state.histFilter === "medida" && tipoActa(acta) !== "medida") return false;
       if (!q) return true;
       const byName = norm(acta.trabajador.nombre).includes(q);
       const byDni = digits && acta.trabajador.dni.includes(digits);
@@ -1670,10 +1718,10 @@
         ? `<span class="big">${esc(fmtPct(acta.porcentaje))}%</span><span class="sm">${esc(medidaById(acta.tipo).vez.split("·")[0])}</span>`
         : top ? `<span class="big">${esc(fmtPct(top.valor))}%</span><span class="sm">${esc(top.label)}</span>` : "";
       return `
-        <button type="button" class="upload-card card-hit ${acta.tipo === "dt" || acta.tipo === "llamada" || acta.tipo === "escrita" ? "is-pending" : ""}" data-act="open-acta" data-id="${esc(acta.id)}" data-from="historial">
+        <button type="button" class="upload-card card-hit" data-act="open-acta" data-id="${esc(acta.id)}" data-from="historial">
           <div class="upload-card-top">
-            <span class="upload-card-type">${esc(medidaById(acta.tipo === "conforme" ? "llamada" : acta.tipo).label)}</span>
-            <span class="upload-card-status ${acta.tipo === "dt" ? "pending" : "sent"}">${acta.tipo === "dt" ? "RRHH" : "Campo"}</span>
+            <span class="upload-card-type">${esc(medidaById(tipoActa(acta)).label)}</span>
+            <span class="upload-card-status ${tipoActa(acta) === "medida" ? "pending" : "sent"}">${tipoActa(acta) === "medida" ? "Medida" : "Campo"}</span>
           </div>
           <div class="upload-card-body">
             <div class="upload-card-info">
@@ -1730,9 +1778,7 @@
   }
 
   function checklistOk() {
-    if (!(state.draft.marcados || []).length) return false;
-    if (medidaActual() === "escrita" && !state.draft.qrOk) return false;
-    return true;
+    return !!(state.draft.marcados || []).length;
   }
 
   function canLeave(step) {
@@ -1744,25 +1790,44 @@
   function nextLabel() {
     if (state.step === 1) return "Ir al checklist";
     const medida = medidaActual();
-    if (medida === "dt") return "Enviar a DT";
-    if (medida === "escrita") return "Registrar carta";
-    return "Registrar llamada";
+    if (medida === "medida") return "Registrar incidencia";
+    if (medida === "critico") return "Registrar crítico";
+    return "Registrar incidencia";
+  }
+
+  function paintConfirmBlock() {
+    const hint = document.querySelector("#screen-acta .confirm-hint");
+    const btn = document.querySelector("#screen-acta [data-act='confirmar']");
+    if (hint) {
+      hint.textContent = state.verifyOk
+        ? "Identidad validada con carnet. Puede confirmar la lectura."
+        : "Escanee el carnet con la cámara para validar a la persona y desbloquear la confirmación.";
+    }
+    if (btn) {
+      btn.disabled = !state.verifyOk;
+      btn.textContent = "Confirmar lectura";
+    }
   }
 
   function paintActions() {
+    actions.className = "form-actions";
+    actions.removeAttribute("role");
+    actions.removeAttribute("aria-label");
+    actions.hidden = false;
     actions.classList.toggle("is-acta", state.screen === "acta" && !!state.viewing);
     if (state.screen === "flow") {
       const ok = canLeave(state.step);
       actions.innerHTML = `
-        <button type="button" class="btn btn-ghost" data-act="back">${state.step === 1 ? "Inicio" : "Atrás"}</button>
+        <button type="button" class="btn btn-ghost" data-act="back">Atrás</button>
         <button type="button" class="btn btn-primary" data-act="next" ${ok ? "" : "disabled"}>${esc(nextLabel())}</button>`;
       return;
     }
     if (state.screen === "acta" && state.viewing) {
+      const ok = !!state.verifyOk;
       actions.innerHTML = `
         <button type="button" class="btn btn-ghost" data-act="back">Volver</button>
-        <button type="button" class="btn btn-ghost" data-act="pdf">${icon("pdf", 18)} PDF</button>
-        <button type="button" class="btn btn-primary" data-act="share">${icon("share", 18)} Compartir</button>`;
+        <button type="button" class="btn btn-primary" data-act="share">${icon("share", 18)} Compartir</button>
+        <button type="button" class="btn btn-verify ${ok ? "is-ok" : "is-pending"}" data-act="verify-acta" aria-label="${ok ? "Identidad validada" : "Escanear carnet con cámara"}">${icon("camera", 18)}</button>`;
       return;
     }
     actions.innerHTML = "";
@@ -1987,18 +2052,13 @@
 
   async function saveActa() {
     if (state.saving) return;
-    if (state.draft.trabajador && dtBloqueado(state.draft.trabajador.dni)) {
-      avisoDt();
-      return;
-    }
     if (!state.draft.supervisor) {
       toast("Elige al responsable", "warn");
       openPicker("supervisor");
       return;
     }
     if (!checklistOk()) {
-      if (!(state.draft.marcados || []).length) toast("Marca el suceso", "warn");
-      else toast("Escanea el QR del carnet", "warn");
+      toast("Marca el suceso", "warn");
       return;
     }
     state.saving = true;
@@ -2006,8 +2066,20 @@
     const medida = medidaActual();
     const criterios = motivosMarcados();
     const dni = state.draft.trabajador.dni;
-    const yaDt = columnasDe(dni).dt;
-    const columnas = Object.assign(columnasDe(dni), { [medida]: true });
+    const countsPrev = conteoCriterios(dni);
+    const maxAntes = maxConteo(dni);
+    const conteosNuevos = {};
+    SUCESOS.forEach((item) => { conteosNuevos[item.id] = countsPrev[item.id] || 0; });
+    criterios.forEach((item) => {
+      conteosNuevos[item.id] = (countsPrev[item.id] || 0) + 1;
+    });
+    const peor = Math.max.apply(null, Object.values(conteosNuevos).concat([0]));
+    const llegaMargen = maxAntes < MAX_MISMO_MOTIVO && peor >= MAX_MISMO_MOTIVO;
+    const columnas = {
+      llamada: peor >= 1,
+      escrita: peor >= 2,
+      dt: peor >= 3
+    };
     const acta = {
       id: `CL-${stamp.yyyymmdd}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       createdAt: new Date().toISOString(),
@@ -2019,14 +2091,16 @@
       motivoId: criterios.map((item) => item.id).join(","),
       motivoLabel: criterios.map((item) => item.label).join(", "),
       criterios: criterios.map((item) => ({ id: item.id, label: item.label })),
+      conteos: conteosNuevos,
+      acumulado: peor,
       columnas: columnas,
       progreso: columnas,
       porcentaje: null,
       texto: buildTexto(),
       descripcion: String(state.draft.descripcion || "").trim(),
-      carnetVisto: medida === "escrita" ? !!state.draft.carnetVisto : false,
-      qrOk: medida === "escrita" ? !!state.draft.qrOk : false,
-      qrValor: medida === "escrita" && state.draft.qrOk ? String(state.draft.qrValor || "").slice(0, 120) : "",
+      carnetVisto: false,
+      qrOk: false,
+      qrValor: "",
       trabajador: {
         dni: dni,
         nombre: state.draft.trabajador.nombre,
@@ -2046,17 +2120,21 @@
       state.actas.unshift(acta);
       state.viewing = acta;
       state.returnTo = "home";
+      state.verifyOk = false;
       clearDraft(true);
       if (navigator.vibrate) navigator.vibrate(12);
-      const llegaDt = medida === "dt" && !yaDt;
       go("acta");
-      if (llegaDt) {
+      if (llegaMargen) {
         await ask({
-          title: "Recomendación del caso",
-          text: "Esta persona llegó a suspensión. Corresponde mandar el acta a RRHH. Recursos Humanos va a evaluar su caso.",
+          title: "Nivel medida",
+          text: "Acumuló 3 de la misma incidencia (tolerancia de referencia). Queda registro formal. En campo se puede seguir registrando.",
           ok: "Cerrar",
           hideCancel: true
         });
+      } else if (peor > MAX_MISMO_MOTIVO) {
+        toast(`Acumulado ${peor} de la misma incidencia. Sigue registrando.`, "info");
+      } else if (medida === "critico") {
+        toast("Estado crítico. Una más de la misma incidencia marca nivel medida.", "warn");
       }
     } catch (error) {
       toast("No se pudo guardar", "error");
@@ -2127,7 +2205,7 @@
     ctx.fillText("LICAPA  ·  COMPROMISO DE TRABAJO", pad, 86);
     ctx.fillStyle = "#1F3D2A";
     ctx.font = '800 48px "Plus Jakarta Sans", sans-serif';
-    const titulo = acta.tipo === "dt" ? "Suspensión" : acta.tipo === "escrita" ? "Llamada escrita" : "Llamada de atención";
+    const titulo = medidaById(tipoActa(acta)).label;
     ctx.fillText(titulo, pad, 196);
     ctx.fillStyle = "#2C3330";
     ctx.font = '700 40px "Plus Jakarta Sans", sans-serif';
@@ -2290,6 +2368,10 @@
   async function confirmarLectura() {
     const acta = state.viewing;
     if (!acta || state.saving) return;
+    if (!state.verifyOk) {
+      toast("Escanee el carnet con la cámara para validar a la persona.", "warn");
+      return;
+    }
     state.saving = true;
     const btn = document.querySelector("[data-act='confirmar']");
     if (btn) {
@@ -2421,6 +2503,7 @@
   let qrTimer = 0;
 
   function closeQr() {
+    qrMode = "open";
     qrStop = true;
     if (qrTimer) {
       clearInterval(qrTimer);
@@ -2445,7 +2528,55 @@
     return chunks.find((dni) => state.workersByDni.has(dni)) || "";
   }
 
+  function elegirVozMujer() {
+    if (!window.speechSynthesis) return null;
+    const voces = speechSynthesis.getVoices() || [];
+    const es = voces.filter((voz) => /^es(-|_)/i.test(voz.lang) || /spanish|español/i.test(voz.name));
+    const mujer = es.find((voz) => /female|mujer|monica|paulina|sabina|lucia|lucía|maria|maría|carmen|sofia|sofía|elena|ines|inés|francisca|dora|karina/i.test(`${voz.name} ${voz.voiceURI}`))
+      || es.find((voz) => /es-MX|es-PE|es-US|es-ES/i.test(voz.lang))
+      || es[0]
+      || voces.find((voz) => /female|mujer/i.test(voz.name))
+      || null;
+    return mujer;
+  }
+
+  function prepararVoz() {
+    if (!window.speechSynthesis) return Promise.resolve(null);
+    if (voiceReady) return voiceReady;
+    voiceReady = new Promise((resolve) => {
+      const listo = () => resolve(elegirVozMujer());
+      const voces = speechSynthesis.getVoices();
+      if (voces && voces.length) return listo();
+      speechSynthesis.addEventListener("voiceschanged", listo, { once: true });
+      setTimeout(listo, 700);
+    });
+    return voiceReady;
+  }
+
+  async function hablarRegistro(acta) {
+    if (!acta || !window.speechSynthesis) {
+      toast("Este teléfono no tiene voz del sistema", "warn");
+      return;
+    }
+    const voz = await prepararVoz();
+    const nombre = titleCase(acta.trabajador.nombre);
+    const dni = acta.trabajador.dni;
+    const motivo = acta.motivoLabel || "la incidencia registrada";
+    const nivel = nivelAuditoria(dni);
+    const texto = `Atención. Se confirma el registro de incidencia de Q Berries. Trabajador: ${nombre}. D N I ${dni.split("").join(" ")}. Incidencia: ${motivo}. Estado actual: ${nivel.label}. El registro quedó conforme en este teléfono. Queda constancia formal del caso.`;
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(texto);
+    utter.lang = (voz && voz.lang) || "es-PE";
+    if (voz) utter.voice = voz;
+    utter.rate = 0.92;
+    utter.pitch = 1.05;
+    utter.volume = 1;
+    speechSynthesis.speak(utter);
+  }
+
   async function acceptQr(raw) {
+    const modo = qrMode;
+    qrMode = "open";
     closeQr();
     const text = String(raw || "").trim();
     const dni = dniEnPadron(text);
@@ -2454,25 +2585,32 @@
       return;
     }
     const worker = state.workersByDni.get(dni);
+    if (modo === "verify") {
+      const acta = state.viewing;
+      if (!acta || !acta.trabajador) return;
+      if (String(acta.trabajador.dni) !== String(dni)) {
+        state.verifyOk = false;
+        paintActions();
+        paintConfirmBlock();
+        toast("El carnet no es de esta persona. El DNI no coincide.", "warn");
+        return;
+      }
+      state.verifyOk = true;
+      paintActions();
+      paintConfirmBlock();
+      toast(`${titleCase(worker.nombre)} · DNI ${dni} · Identidad validada`);
+      await hablarRegistro(acta);
+      return;
+    }
     const misma = state.draft.trabajador && state.draft.trabajador.dni === dni;
     if (state.draft.trabajador && !misma) {
       toast("El carnet no es de esta persona. El DNI no coincide.", "warn");
       return;
     }
     if (!state.draft.trabajador) {
-      if (tuvoDt(dni) || dtBloqueado(dni)) {
-        const remote = await historiaDe(dni);
-        const mando = servidorBloquea(remote, dni);
-        if (mando === true) {
-          cerrarDt(dni);
-          avisoDt();
-          return;
-        }
-        if (mando === false) soltarDt(dni);
-        else if (dtBloqueado(dni)) {
-          avisoDt();
-          return;
-        }
+      if (!tieneResponsable()) {
+        pideResponsable();
+        return;
       }
       const evaluador = state.draft.evaluador;
       const supervisor = state.draft.supervisor;
@@ -2485,6 +2623,7 @@
       state.step = 2;
       state.maxReached = 2;
       state.manualOpen = false;
+      state.histIncOpen = false;
     }
     state.draft.qrOk = true;
     state.draft.qrValor = text.slice(0, 120);
@@ -2494,24 +2633,29 @@
     persistDraft();
     go("flow");
     toast(misma ? "Carnet verificado" : `${titleCase(worker.nombre)} · ${medidaById(faseDe(dni)).label}`);
-    const antes = faseDe(dni);
     asegurarHistoria(dni).then(() => {
-      if (state.screen === "flow" && state.draft.trabajador && state.draft.trabajador.dni === dni && faseDe(dni) !== antes) render();
+      if (state.screen === "flow" && state.draft.trabajador && state.draft.trabajador.dni === dni) render();
     });
   }
 
-  async function openQr(button) {
+  async function openQr(button, mode) {
+    qrMode = mode || "open";
+    if (qrMode === "open" && state.screen === "home" && !tieneResponsable()) {
+      pideResponsable();
+      return;
+    }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       toast("Este teléfono no abre la cámara", "warn");
       return;
     }
     closeQr();
-    qrButton = button;
-    button.classList.add("is-live");
+    qrButton = button || null;
+    if (button) button.classList.add("is-live");
     const box = document.createElement("div");
     box.id = "qr-inline";
     box.className = "overlay open";
-    box.innerHTML = `<div class="qr-modal" role="dialog" aria-modal="true" aria-label="Escanear QR"><p class="qr-modal-title">Apunta al QR del carnet</p><div class="scan-box is-wait"><p class="scan-wait">Abriendo cámara…</p><video id="cam" playsinline muted autoplay webkit-playsinline="true"></video><div class="finder-sq"></div><button type="button" class="qr-close" data-act="close-qr" aria-label="Cerrar">×</button></div></div>`;
+    const titulo = qrMode === "verify" ? "Verifica el QR del trabajador" : "Apunta al QR del carnet";
+    box.innerHTML = `<div class="qr-modal" role="dialog" aria-modal="true" aria-label="Escanear QR"><p class="qr-modal-title">${titulo}</p><div class="scan-box is-wait"><p class="scan-wait">Abriendo cámara…</p><video id="cam" playsinline muted autoplay webkit-playsinline="true"></video><div class="finder-sq"></div><button type="button" class="qr-close" data-act="close-qr" aria-label="Cerrar">×</button></div></div>`;
     document.body.appendChild(box);
     document.documentElement.classList.add("precise-open");
     const video = box.querySelector("video");
@@ -2635,7 +2779,8 @@
       return go("historial");
     }
     if (act === "home") {
-      clearDraft(true);
+      if (state.screen === "home") return;
+      if (state.screen !== "flow") clearDraft(true);
       return go("home");
     }
     if (act === "confirmar") return confirmarLectura();
@@ -2696,12 +2841,11 @@
     if (act === "open-evaluador") return openPicker("evaluador");
     if (act === "open-lote") return openPicker("lote");
     if (act === "open-supervisor") return openPicker("supervisor");
-    if (act === "fase") {
-      const id = button.dataset.fase;
-      if (id === medidaActual()) return;
-      const dni = state.draft.trabajador ? state.draft.trabajador.dni : "";
-      const ya = actasDe(dni).some((acta) => acta.tipo === id);
-      toast(ya ? "Esa fase ya quedó registrada." : "No se salta. Primero la fase anterior.", ya ? "info" : "warn");
+    if (act === "fase") return;
+    if (act === "toggle-hist-inc") {
+      state.histIncOpen = !state.histIncOpen;
+      const body = document.querySelector("#screen-flow .form-body");
+      if (body) body.innerHTML = stepChecklist();
       return;
     }
     if (act === "criterio") {
@@ -2713,7 +2857,8 @@
       else set.delete(id);
       state.draft.marcados = [...set];
       persistDraft();
-      paintChecklist();
+      const body = document.querySelector("#screen-flow .form-body");
+      if (body) body.innerHTML = stepChecklist();
       paintActions();
       return;
     }
@@ -2723,7 +2868,20 @@
       persistDraft();
       return;
     }
-    if (act === "scan-qr") return openQr(button);
+    if (act === "scan-qr") return openQr(button, "open");
+    if (act === "verify-acta") {
+      if (!state.viewing) return;
+      prepararVoz();
+      if (window.speechSynthesis) {
+        try {
+          const unlock = new SpeechSynthesisUtterance(".");
+          unlock.volume = 0.01;
+          unlock.rate = 2;
+          speechSynthesis.speak(unlock);
+        } catch (error) { /* iPhone necesita el gesto del toque */ }
+      }
+      return openQr(button, "verify");
+    }
     if (act === "close-qr") return closeQr();
     if (act === "pick-item") return applyPick(button.dataset.id);
     if (act === "regen") {
@@ -2741,11 +2899,12 @@
     }
     if (act === "share") return shareActa(false);
     if (act === "download") return shareActa(true);
-    if (act === "pdf") return downloadPdf();
-    if (act === "enviar-dt") return enviarDt();
+    if (act === "pdf") return toast("El PDF ya no se usa en esta versión", "info");
+    if (act === "enviar-dt") return confirmarLectura();
     if (act === "open-acta") {
       state.viewing = state.actas.find((acta) => acta.id === button.dataset.id) || null;
       state.returnTo = button.dataset.from || "historial";
+      state.verifyOk = false;
       if (state.viewing) go("acta");
       return;
     }
@@ -2827,40 +2986,27 @@
   }
 
   async function refrescarCampo() {
-    const vistos = new Set();
-    const bloqueados = new Set();
-    state.actas.forEach((acta) => {
-      if (acta.tipo !== "dt" || !acta.trabajador) return;
-      const dni = String(acta.trabajador.dni);
-      vistos.add(dni);
-      if (dtBloqueado(dni)) bloqueados.add(dni);
-    });
     const signal = netSignal(10000);
     const marcas = Date.now();
     const inicio = performance.now();
-    const pedidos = [fetch(conConsulta_(syncUrl(), { dias: "1", t: marcas }), { cache: "no-store", redirect: "follow", signal })];
-    vistos.forEach((dni) => {
-      pedidos.push(fetch(conConsulta_(syncUrl(), { dni, t: marcas }), { cache: "no-store", redirect: "follow", signal }));
-    });
-    const responses = await Promise.all(pedidos.map((pedido) => pedido.catch(() => null)));
+    const response = await fetch(conConsulta_(syncUrl(), { dias: "1", t: marcas }), { cache: "no-store", redirect: "follow", signal });
     let ok = false;
-    for (const response of responses) {
-      if (!response || !response.ok) continue;
+    if (response && response.ok) {
       const remote = await response.json().catch(() => null);
-      if (!Array.isArray(remote)) continue;
-      ok = true;
-      mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
+      if (Array.isArray(remote)) {
+        ok = true;
+        mezclarActas(remote.map((acta) => Object.assign({}, acta, { pending: false, synced: true, confirmado: true })));
+        idbReplace(state.actas);
+      }
     }
     const segundos = Math.round((performance.now() - inicio) / 100) / 10;
-    if (ok) idbReplace(state.actas);
     if (state.screen === "home") paintHomeSearch();
+    if (state.screen === "flow" && state.draft.trabajador) {
+      const body = document.querySelector("#screen-flow .form-body");
+      if (body) body.innerHTML = stepChecklist();
+    }
     paintNet();
-    return {
-      ok,
-      segundos,
-      libres: [...bloqueados].filter((dni) => !dtBloqueado(dni)),
-      cerrados: [...vistos].filter((dni) => !bloqueados.has(dni) && dtBloqueado(dni))
-    };
+    return { ok, segundos };
   }
 
   async function applyUpdate() {
@@ -2876,18 +3022,8 @@
           toast("El GET no respondió. Presiona otra vez.", "warn");
           return;
         }
-        if (resultado.libres.length) {
-          if (label) label.textContent = `Listo en ${resultado.segundos} s. Suspensión liberada.`;
-          toast(`El Excel liberó la suspensión. GET ${resultado.segundos} s.`);
-          return;
-        }
-        if (resultado.cerrados.length) {
-          if (label) label.textContent = `Listo en ${resultado.segundos} s. Volvió a suspensión.`;
-          toast(`Otra vez en suspensión. GET ${resultado.segundos} s.`);
-          return;
-        }
         if (label) label.textContent = `Está al día. GET ${resultado.segundos} s.`;
-        toast(`Excel revisado en ${resultado.segundos} s. Sin cambios.`);
+        toast(`Excel revisado en ${resultado.segundos} s.`);
       } catch (error) {
         if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
         toast("El GET no respondió. Presiona otra vez.", "warn");
@@ -3017,6 +3153,12 @@
   function onInput(event) {
     const target = event.target;
     if (target.id === "home-q") {
+      if (!tieneResponsable()) {
+        target.value = "";
+        state.query = "";
+        pideResponsable();
+        return;
+      }
       let value = target.value;
       if (/^\d+$/.test(value)) value = value.replace(/\D/g, "").slice(0, 8);
       if (value !== target.value) target.value = value;
@@ -3147,6 +3289,12 @@
 
   document.body.addEventListener("click", onClick);
   document.body.addEventListener("input", onInput);
+  document.body.addEventListener("focusin", (event) => {
+    if (event.target && event.target.id === "home-q" && !tieneResponsable()) {
+      event.target.blur();
+      pideResponsable();
+    }
+  });
   document.getElementById("fb-ok").addEventListener("click", () => closeAsk(true));
   document.getElementById("fb-cancel").addEventListener("click", () => closeAsk(false));
   document.getElementById("fb").addEventListener("click", (event) => {
