@@ -49,6 +49,19 @@
 .name-input {
   font-size: 16px;
 }
+.field > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field-limit {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--qb-muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
 
 /* Columna de teléfono en escritorio, para revisar el flujo sin estirarlo */
 @media (min-width: 840px) {
@@ -1380,7 +1393,7 @@
 }
 .form-actions.is-acta,
 .flow-actions.is-acta {
-  grid-template-columns: 0.9fr 1.2fr 52px;
+  grid-template-columns: 1fr 1.35fr;
 }
 .acta-paper.is-company {
   padding: 0;
@@ -1473,6 +1486,8 @@
   text-align: justify;
   text-justify: inter-word;
   hyphens: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .acta-body {
   margin: 12px 0 0;
@@ -1484,10 +1499,14 @@
   font-weight: 600;
   line-height: 1.5;
   color: var(--qb-slate);
-  white-space: pre-line;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-align: justify;
   text-justify: inter-word;
   hyphens: auto;
+  max-width: 100%;
+  overflow: hidden;
 }
 .acta-meta {
   display: grid;

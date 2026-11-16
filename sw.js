@@ -1,4 +1,4 @@
-const CACHE = "qb-compromiso-v25";
+const CACHE = "qb-compromiso-v30";
 
 const ASSETS = [
   "./",

@@ -2146,7 +2146,7 @@ body[data-qb-screen="resumen"] > .form-actions.dual { display: grid; }
 }
 .flow-actions .btn { width: 100%; }
 .flow-actions.is-acta {
-  grid-template-columns: 0.9fr 1.2fr 52px;
+  grid-template-columns: 1fr 1.35fr;
 }
 body.kb-open .app {
   overflow: hidden;

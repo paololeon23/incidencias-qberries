@@ -55,6 +55,7 @@
     pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>',
     scan: '<path d="M4 4h6v6H4z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/><path d="M14 14h2.2v2.2H14z"/><path d="M17.8 14H20v2.2h-2.2z"/><path d="M14 17.8h2.2V20H14z"/><path d="M17.8 17.8H20V20h-2.2z"/>',
     more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-7h6v7"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     camera: '<path d="M14.5 4h-5l-1.5 2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.5-2Z"/><circle cx="12" cy="13" r="3.5"/>',
     verify: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>'
@@ -62,7 +63,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "10.0";
+  const APP_VERSION = "10.5";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -124,7 +125,8 @@
       detalle: "",
       texto: "",
       textoTouched: false,
-      firma: null
+      firma: null,
+      actaId: ""
     };
   }
 
@@ -363,6 +365,12 @@
     });
   }
 
+  /** Solo suman las ya guardadas. El borrador/preview (confirmado === false) no cuenta. */
+  function actaSumaHistorial(acta) {
+    if (!acta || acta.tipo === "conforme") return false;
+    return acta.confirmado !== false;
+  }
+
   function idsCriterioActa(acta) {
     if (!acta) return [];
     if (Array.isArray(acta.criterios) && acta.criterios.length) {
@@ -377,10 +385,17 @@
     }).filter(Boolean))];
   }
 
-  function conteoCriterios(dni) {
+  function conteoCriterios(dni, excludeId) {
     const counts = {};
+    const skip = String(
+      excludeId ||
+      (state.draft && state.draft.actaId ? state.draft.actaId : "") ||
+      ""
+    );
     SUCESOS.forEach((item) => { counts[item.id] = 0; });
     actasDe(dni).forEach((acta) => {
+      if (skip && String(acta.id) === skip) return;
+      if (!actaSumaHistorial(acta)) return;
       idsCriterioActa(acta).forEach((id) => {
         if (Object.prototype.hasOwnProperty.call(counts, id)) counts[id] += 1;
       });
@@ -388,8 +403,8 @@
     return counts;
   }
 
-  function maxConteo(dni) {
-    const counts = Object.values(conteoCriterios(dni));
+  function maxConteo(dni, excludeId) {
+    const counts = Object.values(conteoCriterios(dni, excludeId));
     return counts.length ? Math.max.apply(null, counts) : 0;
   }
 
@@ -514,12 +529,12 @@
       const cuento = top && top.n > MAX_MISMO_MOTIVO
         ? `Acumulado: ${top.n} en ${top.label} (tolerancia de referencia: 3).`
         : "Acumulado: 3 de la misma incidencia (tolerancia de referencia).";
-      return `Se registra incidencia en nivel medida a ${nombre}. Incidencia: ${motivo}. ${cuento} Queda constancia formal del registro.${extra}`;
+      return `Se registra incidencia a ${nombre}.\n\nIncidencia: ${motivo}.\n\n${cuento}\n\nQueda constancia del registro.${extra}`;
     }
     if (medida === "critico") {
-      return `Se registra llamada de incidencia a ${nombre}. Incidencia: ${motivo}. Es la segunda vez de la misma incidencia. Queda constancia formal del registro.${extra}`;
+      return `Se registra incidencia a ${nombre}.\n\nIncidencia: ${motivo}.\n\nEs la segunda vez de la misma incidencia.\n\nQueda constancia del registro.${extra}`;
     }
-    return `Se registra llamada de incidencia a ${nombre}. Incidencia: ${motivo}. Queda constancia del registro.${extra}`;
+    return `Se registra incidencia a ${nombre}.\n\nIncidencia: ${motivo}.\n\nQueda constancia del registro.${extra}`;
   }
 
   function hasDraft() {
@@ -566,6 +581,14 @@
   }
 
   function clearDraft(keepEvaluador) {
+    const previewId = String(state.draft && state.draft.actaId || "");
+    if (previewId) {
+      const preview = state.actas.find((acta) => acta.id === previewId);
+      if (preview && preview.confirmado === false) {
+        state.actas = state.actas.filter((acta) => acta.id !== previewId);
+        idbDel(previewId).catch(() => {});
+      }
+    }
     const evaluador = keepEvaluador ? state.draft.evaluador : null;
     const supervisor = keepEvaluador ? state.draft.supervisor : null;
     state.draft = emptyDraft();
@@ -1425,8 +1448,8 @@
                 </label>`;
             }).join("")}
             <label class="field">
-              <span>Descripción del suceso</span>
-              <textarea id="suceso-nota" maxlength="180" placeholder="Qué pasó">${esc(state.draft.descripcion)}</textarea>
+              <span>Descripción del suceso <small class="field-limit">${esc(String(state.draft.descripcion || "").length)}/280</small></span>
+              <textarea id="suceso-nota" maxlength="280" rows="3" placeholder="Qué pasó (máx. 280)">${esc(state.draft.descripcion)}</textarea>
             </label>
           </div>
         </div>
@@ -1582,6 +1605,7 @@
           sub: acta.id,
           net: false,
           tools: [
+            { act: "home", icon: "home", label: "Inicio" },
             { act: "historial", icon: "history", label: "Historial" },
             { act: "help", icon: "settings", label: "Ajustes" }
           ]
@@ -1638,8 +1662,7 @@
               </div>
               <p class="audit-note is-${nivel.color}">${nivel.max ? `Acumulado de la misma incidencia: ${nivel.max}. Tolerancia de referencia: 3.` : "Sin incidencia registrada en este teléfono."}</p>
               <div class="confirm-block">
-                <p class="confirm-hint">${state.verifyOk ? "Identidad validada con carnet. Puede confirmar la lectura." : "Escanee el carnet con la cámara para validar a la persona y desbloquear la confirmación."}</p>
-                <button type="button" class="btn btn-primary dt-send" data-act="confirmar" ${state.verifyOk ? "" : "disabled"}>Confirmar lectura</button>
+                <button type="button" class="btn btn-primary dt-send" data-act="confirmar">Guardar incidencia</button>
               </div>
             </section>
           </div>
@@ -1652,10 +1675,12 @@
       <section class="screen active" id="screen-historial">
         ${header({
           compact: true,
+          back: "home",
           title: "Historial",
           sub: "Actas de este teléfono",
           net: false,
           tools: [
+            { act: "home", icon: "home", label: "Inicio" },
             { act: "help", icon: "settings", label: "Ajustes" }
           ]
         })}
@@ -1795,20 +1820,6 @@
     return "Registrar incidencia";
   }
 
-  function paintConfirmBlock() {
-    const hint = document.querySelector("#screen-acta .confirm-hint");
-    const btn = document.querySelector("#screen-acta [data-act='confirmar']");
-    if (hint) {
-      hint.textContent = state.verifyOk
-        ? "Identidad validada con carnet. Puede confirmar la lectura."
-        : "Escanee el carnet con la cámara para validar a la persona y desbloquear la confirmación.";
-    }
-    if (btn) {
-      btn.disabled = !state.verifyOk;
-      btn.textContent = "Confirmar lectura";
-    }
-  }
-
   function paintActions() {
     actions.className = "form-actions";
     actions.removeAttribute("role");
@@ -1823,11 +1834,9 @@
       return;
     }
     if (state.screen === "acta" && state.viewing) {
-      const ok = !!state.verifyOk;
       actions.innerHTML = `
         <button type="button" class="btn btn-ghost" data-act="back">Volver</button>
-        <button type="button" class="btn btn-primary" data-act="share">${icon("share", 18)} Compartir</button>
-        <button type="button" class="btn btn-verify ${ok ? "is-ok" : "is-pending"}" data-act="verify-acta" aria-label="${ok ? "Identidad validada" : "Escanear carnet con cámara"}">${icon("camera", 18)}</button>`;
+        <button type="button" class="btn btn-primary" data-act="share">${icon("share", 18)} Compartir</button>`;
       return;
     }
     actions.innerHTML = "";
@@ -2066,8 +2075,10 @@
     const medida = medidaActual();
     const criterios = motivosMarcados();
     const dni = state.draft.trabajador.dni;
-    const countsPrev = conteoCriterios(dni);
-    const maxAntes = maxConteo(dni);
+    const editingId = String(state.draft.actaId || "");
+    const prev = editingId ? state.actas.find((item) => item.id === editingId) : null;
+    const countsPrev = conteoCriterios(dni, editingId);
+    const maxAntes = maxConteo(dni, editingId);
     const conteosNuevos = {};
     SUCESOS.forEach((item) => { conteosNuevos[item.id] = countsPrev[item.id] || 0; });
     criterios.forEach((item) => {
@@ -2081,12 +2092,12 @@
       dt: peor >= 3
     };
     const acta = {
-      id: `CL-${stamp.yyyymmdd}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-      createdAt: new Date().toISOString(),
-      yyyymmdd: stamp.yyyymmdd,
-      fecha: stamp.fecha,
-      hora: stamp.hora,
-      fechaLarga: longDate(),
+      id: editingId || `CL-${stamp.yyyymmdd}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      createdAt: prev && prev.createdAt ? prev.createdAt : new Date().toISOString(),
+      yyyymmdd: prev && prev.yyyymmdd ? prev.yyyymmdd : stamp.yyyymmdd,
+      fecha: prev && prev.fecha ? prev.fecha : stamp.fecha,
+      hora: prev && prev.hora ? prev.hora : stamp.hora,
+      fechaLarga: prev && prev.fechaLarga ? prev.fechaLarga : longDate(),
       tipo: medida,
       motivoId: criterios.map((item) => item.id).join(","),
       motivoLabel: criterios.map((item) => item.label).join(", "),
@@ -2109,7 +2120,7 @@
       },
       evaluador: state.draft.evaluador,
       supervisor: state.draft.supervisor,
-      repetia: actasDe(dni).length
+      repetia: actasDe(dni).filter((item) => item.id !== editingId).length
     };
     try {
       acta.confirmado = false;
@@ -2119,21 +2130,22 @@
       await idbPut(acta);
       state.actas.unshift(acta);
       state.viewing = acta;
-      state.returnTo = "home";
+      state.draft.actaId = acta.id;
+      state.returnTo = "flow";
       state.verifyOk = false;
-      clearDraft(true);
+      persistDraft();
       if (navigator.vibrate) navigator.vibrate(12);
       go("acta");
-      if (llegaMargen) {
+      if (!editingId && llegaMargen) {
         await ask({
           title: "Nivel medida",
           text: "Acumuló 3 de la misma incidencia (tolerancia de referencia). Queda registro formal. En campo se puede seguir registrando.",
           ok: "Cerrar",
           hideCancel: true
         });
-      } else if (peor > MAX_MISMO_MOTIVO) {
+      } else if (!editingId && peor > MAX_MISMO_MOTIVO) {
         toast(`Acumulado ${peor} de la misma incidencia. Sigue registrando.`, "info");
-      } else if (medida === "critico") {
+      } else if (!editingId && medida === "critico") {
         toast("Estado crítico. Una más de la misma incidencia marca nivel medida.", "warn");
       }
     } catch (error) {
@@ -2368,16 +2380,12 @@
   async function confirmarLectura() {
     const acta = state.viewing;
     if (!acta || state.saving) return;
-    if (!state.verifyOk) {
-      toast("Escanee el carnet con la cámara para validar a la persona.", "warn");
-      return;
-    }
     state.saving = true;
     const btn = document.querySelector("[data-act='confirmar']");
     if (btn) {
       btn.disabled = true;
       btn.classList.add("is-busy");
-      btn.innerHTML = `<span class="btn-spin"></span>Subiendo`;
+      btn.innerHTML = `<span class="btn-spin"></span>Guardando`;
     }
     try {
       acta.confirmado = true;
@@ -2388,7 +2396,7 @@
       if (uploaded) {
         acta.pending = false;
         acta.synced = true;
-        toast("Se subió correctamente");
+        toast("Incidencia guardada");
       } else {
         toast(navigator.onLine ? "Quedó pendiente y sube solo." : "Sin señal. Quedó pendiente.", "warn");
       }
@@ -2396,11 +2404,11 @@
       clearDraft(true);
       go("home");
     } catch (error) {
-      toast("No se pudo subir", "error");
+      toast("No se pudo guardar", "error");
       if (btn) {
         btn.disabled = false;
         btn.classList.remove("is-busy");
-        btn.textContent = "Confirmar lectura";
+        btn.textContent = "Guardar incidencia";
       }
     } finally {
       state.saving = false;
@@ -2589,15 +2597,9 @@
       const acta = state.viewing;
       if (!acta || !acta.trabajador) return;
       if (String(acta.trabajador.dni) !== String(dni)) {
-        state.verifyOk = false;
-        paintActions();
-        paintConfirmBlock();
         toast("El carnet no es de esta persona. El DNI no coincide.", "warn");
         return;
       }
-      state.verifyOk = true;
-      paintActions();
-      paintConfirmBlock();
       toast(`${titleCase(worker.nombre)} · DNI ${dni} · Identidad validada`);
       await hablarRegistro(acta);
       return;
@@ -2761,6 +2763,7 @@
       return;
     }
     if (act === "help") {
+      closeFab();
       paintAjustes();
       checkUpdate();
       document.getElementById("help").hidden = false;
@@ -2774,11 +2777,13 @@
     if (act === "close-transfer") return closeTransfer();
     if (act === "close-picker") return closePicker();
     if (act === "historial") {
+      closeFab();
       state.histPage = 1;
       state.histFilter = "todas";
       return go("historial");
     }
     if (act === "home") {
+      closeFab();
       if (state.screen === "home") return;
       if (state.screen !== "flow") clearDraft(true);
       return go("home");
@@ -3061,6 +3066,14 @@
 
   async function goBack() {
     if (state.screen === "acta") {
+      if (state.returnTo === "flow" && state.draft.trabajador && state.draft.actaId) {
+        state.step = 2;
+        state.maxReached = Math.max(state.maxReached, 2);
+        state.viewing = null;
+        persistDraft();
+        go("flow");
+        return;
+      }
       go(state.returnTo || "home");
       return;
     }
@@ -3204,7 +3217,10 @@
       return;
     }
     if (target.id === "suceso-nota") {
-      state.draft.descripcion = target.value;
+      state.draft.descripcion = String(target.value || "").slice(0, 280);
+      if (target.value !== state.draft.descripcion) target.value = state.draft.descripcion;
+      const limit = target.closest("label") && target.closest("label").querySelector(".field-limit");
+      if (limit) limit.textContent = `${state.draft.descripcion.length}/280`;
       persistDraft();
       return;
     }

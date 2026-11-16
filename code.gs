@@ -299,6 +299,50 @@ function esReciente_(fecha, dias) {
   return f >= limite;
 }
 
+function idsMarcados_(acta) {
+  if (!acta) return [];
+  if (Array.isArray(acta.criterios) && acta.criterios.length) {
+    return acta.criterios.map(function (item) { return item && item.id; }).filter(Boolean);
+  }
+  if (acta.motivoId) {
+    return String(acta.motivoId).split(",").map(function (part) { return part.trim(); }).filter(Boolean);
+  }
+  var label = String(acta.motivoLabel || "");
+  if (!label) return [];
+  var map = {
+    "incumplió la instrucción": "instruccion",
+    "llegada tardía": "tardia",
+    "inasistencia": "falta",
+    "epp y seguridad": "epp",
+    "bpa e inocuidad": "bpa",
+    "calidad de fruta": "fruta",
+    "conducta": "conducta"
+  };
+  return label.split(",").map(function (part) {
+    return map[part.trim().toLowerCase()] || "";
+  }).filter(Boolean);
+}
+
+/** Recalcula cantidades: historial real del DNI + 1 por cada ítem de ESTE registro. */
+function recalcularConteos_(activa, archivo, acta) {
+  var conteos = {};
+  COUNT_COLS.forEach(function (item) { conteos[item.id] = 0; });
+  var dni = acta && acta.trabajador ? String(acta.trabajador.dni || "") : "";
+  if (!dni) return conteos;
+  var previas = dedupeActas_(readActas_(activa).concat(readActas_(archivo)));
+  previas.forEach(function (prev) {
+    if (!prev || String(prev.id) === String(acta.id)) return;
+    if (!prev.trabajador || String(prev.trabajador.dni) !== dni) return;
+    idsMarcados_(prev).forEach(function (id) {
+      if (Object.prototype.hasOwnProperty.call(conteos, id)) conteos[id] += 1;
+    });
+  });
+  idsMarcados_(acta).forEach(function (id) {
+    if (Object.prototype.hasOwnProperty.call(conteos, id)) conteos[id] += 1;
+  });
+  return conteos;
+}
+
 function guardarFila_(sh, acta) {
   var last = sh.getLastRow();
   var fila = last + 1;
@@ -311,8 +355,14 @@ function guardarFila_(sh, acta) {
       }
     }
   }
-  var conteos = conteosDe_(acta);
+  var archivo = sheetArchivo_();
+  var conteos = recalcularConteos_(sh, archivo, acta);
   var acumulado = acumuladoDe_(conteos);
+  acta.conteos = conteos;
+  acta.acumulado = acumulado;
+  if (acumulado >= 3) acta.tipo = "medida";
+  else if (acumulado >= 2) acta.tipo = "critico";
+  else acta.tipo = "incidencia";
   var rango = sh.getRange(fila, 1, 1, HEADERS.length);
   rango.setValues([rowFromActa_(acta)]);
   rango
