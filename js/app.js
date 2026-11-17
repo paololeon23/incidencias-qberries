@@ -63,7 +63,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "10.6";
+  const APP_VERSION = "10.7";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -3016,10 +3016,10 @@
 
   async function applyUpdate() {
     const label = document.getElementById("update-state");
-    if (label) label.textContent = "Revisando la versión y el Excel…";
+    if (label) label.textContent = "Revisando la versión de la app…";
     await checkUpdate();
     if (!state.updateAvailable) {
-      if (label) label.textContent = "Pidiendo el Excel…";
+      if (label) label.textContent = "Actualizando el entorno…";
       try {
         const resultado = await refrescarCampo();
         if (!resultado.ok) {
@@ -3027,15 +3027,15 @@
           toast("No se pudo actualizar. Presiona otra vez.", "warn");
           return;
         }
-        if (label) label.textContent = `Está al día. Actualizar ${resultado.segundos} s.`;
-        toast(`Actualizado en ${resultado.segundos} s.`);
+        if (label) label.textContent = `Está al día. Actualizado en ${resultado.segundos} s.`;
+        toast(`Entorno actualizado en ${resultado.segundos} s.`);
       } catch (error) {
         if (label) label.textContent = "No se pudo actualizar. Presiona otra vez.";
         toast("No se pudo actualizar. Presiona otra vez.", "warn");
       }
       return;
     }
-    setLoader(true, "Bajando la app");
+    setLoader(true, "Actualizando la app");
     try {
       if ("serviceWorker" in navigator) {
         const reg = await navigator.serviceWorker.getRegistration();
@@ -3049,7 +3049,7 @@
       location.reload();
     } catch (error) {
       setLoader(false);
-      toast("No se pudo bajar. Revisa la señal.", "warn");
+      toast("No se pudo actualizar. Revisa la señal.", "warn");
     }
   }
 
