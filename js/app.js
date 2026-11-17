@@ -63,7 +63,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "10.5";
+  const APP_VERSION = "10.6";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -2951,7 +2951,7 @@
     const update = document.getElementById("update-state");
     if (update) {
       update.textContent = state.updateAvailable
-        ? "Hay una versión nueva. Presiona para bajarla completa."
+        ? "Hay una versión nueva. Presiona para actualizar."
         : "Está al día. Si sale una versión nueva, aquí se avisa.";
     }
   }
@@ -3023,15 +3023,15 @@
       try {
         const resultado = await refrescarCampo();
         if (!resultado.ok) {
-          if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
-          toast("El GET no respondió. Presiona otra vez.", "warn");
+          if (label) label.textContent = "No se pudo actualizar. Presiona otra vez.";
+          toast("No se pudo actualizar. Presiona otra vez.", "warn");
           return;
         }
-        if (label) label.textContent = `Está al día. GET ${resultado.segundos} s.`;
-        toast(`Excel revisado en ${resultado.segundos} s.`);
+        if (label) label.textContent = `Está al día. Actualizar ${resultado.segundos} s.`;
+        toast(`Actualizado en ${resultado.segundos} s.`);
       } catch (error) {
-        if (label) label.textContent = "El Excel no respondió. Presiona otra vez.";
-        toast("El GET no respondió. Presiona otra vez.", "warn");
+        if (label) label.textContent = "No se pudo actualizar. Presiona otra vez.";
+        toast("No se pudo actualizar. Presiona otra vez.", "warn");
       }
       return;
     }
