@@ -426,7 +426,7 @@ function nivelLabel_(acta, acumulado) {
   if (acta && (acta.tipo === "critico" || acta.tipo === "escrita")) return "Estado crítico";
   if (acumulado >= 3) return "Medida";
   if (acumulado >= 2) return "Estado crítico";
-  return "Llamada incidencia";
+  return "Incidencia";
 }
 
 function actaDeFila_(header, row) {

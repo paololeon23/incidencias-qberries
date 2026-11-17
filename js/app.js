@@ -20,7 +20,7 @@
   const MAX_MISMO_MOTIVO = 3;
 
   const MEDIDAS = [
-    { id: "incidencia", label: "Llamada incidencia", limite: 1, vez: "1.ª vez de la misma incidencia", destino: "Observación en campo", rank: 1 },
+    { id: "incidencia", label: "Incidencia", limite: 1, vez: "1.ª vez de la misma incidencia", destino: "Observación en campo", rank: 1 },
     { id: "critico", label: "Estado crítico", limite: 2, vez: "2.ª vez de la misma incidencia", destino: "Seguimiento crítico", rank: 2 },
     { id: "medida", label: "Medida", limite: 3, vez: "3.ª vez · tolerancia de referencia", destino: "Registro para revisión", rank: 3 }
   ];
@@ -63,7 +63,7 @@
 
   const IMG = window.QB_IMG || { check: "./icons/aprobacion.png", logo: "./assets/icon-192.png", supervisor: "./assets/Supervisor.png" };
   const PAGE = 6;
-  const APP_VERSION = "10.7";
+  const APP_VERSION = "11.0";
   const app = document.getElementById("app");
   const actions = document.getElementById("actions");
   const loader = document.getElementById("loader");
@@ -1132,7 +1132,7 @@
           <section class="flow-map" aria-label="Flujo de campo">
             <div class="flow-map-kicker">De qué trata</div>
             <h3>Suma de la misma incidencia</h3>
-            ${flowStep(1, "Llamada incidencia", "1.ª vez de la misma incidencia. Observación en verde.", false)}
+            ${flowStep(1, "Incidencia", "1.ª vez de la misma incidencia. Observación en verde.", false)}
             ${flowStep(2, "Estado crítico", "2.ª vez de la misma incidencia. Amarillo. No se mezclan tipos.", false)}
             ${flowStep(3, "Medida", "Desde la 3.ª es tolerancia de referencia. Se puede seguir registrando.", true)}
           </section>
@@ -1161,7 +1161,7 @@
             <div class="ops-section-label">Última acta</div>
             ${ultima ? ultimaCard(ultima) : `<div class="ops-last-empty">Todavía no hay actas guardadas.</div>`}
           </section>
-          <p class="home-foot">Q Berries · Compromiso de trabajo · Licapa</p>
+          <p class="home-foot">Q Berries · Incidencias del trabajador</p>
         </div>
       </section>`;
   }
@@ -1423,7 +1423,7 @@
       ${historialIncidenciaHtml(person.dni)}
       <section class="section-card">
         <div class="section-head">
-          <h2 class="section-title">Llamada incidencia</h2>
+          <h2 class="section-title">Incidencia</h2>
           <p class="section-sub">${esc(porqueMedida())}</p>
         </div>
         <div class="fase is-open">
@@ -1616,7 +1616,7 @@
               <div class="acta-brand">
                 <div class="acta-brand-main">
                   <strong>Q Berries</strong>
-                  <span>Licapa · Compromiso de trabajo</span>
+                  <span>INCIDENCIAS DEL TRABAJADOR</span>
                 </div>
                 <em class="acta-doc-tag">Registro formal</em>
               </div>
@@ -2214,7 +2214,7 @@
     ctx.font = '800 28px "Plus Jakarta Sans", sans-serif';
     ctx.fillText("Q BERRIES", pad, 52);
     ctx.font = '700 18px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText("LICAPA  ·  COMPROMISO DE TRABAJO", pad, 86);
+    ctx.fillText("INCIDENCIAS DEL TRABAJADOR", pad, 86);
     ctx.fillStyle = "#1F3D2A";
     ctx.font = '800 48px "Plus Jakarta Sans", sans-serif';
     const titulo = medidaById(tipoActa(acta)).label;
@@ -2326,7 +2326,7 @@
     chunks.push("0.969 0.580 0.114 rg");
     chunks.push("0 794 595 4 re f");
     put("Q BERRIES", 14, "F2", 820, "1 1 1");
-    put("LICAPA  ·  COMPROMISO DE TRABAJO", 8, "F1", 804, "0.86 0.91 0.87");
+    put("INCIDENCIAS DEL TRABAJADOR", 8, "F1", 804, "0.86 0.91 0.87");
     let y = 758;
     put("DOCUMENTO INTERNO", 8, "F2", y, "0.42 0.46 0.44");
     y -= 26;
